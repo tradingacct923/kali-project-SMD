@@ -15,33 +15,42 @@ from config import TICKER as _DEFAULT_TICKER
 _DASHBOARD_USERNAME = os.getenv("DASHBOARD_USERNAME", "Kaali4426")
 _DASHBOARD_PASSWORD = os.getenv("DASHBOARD_PASSWORD", "war_machine")
 _TOKEN_TTL          = 24 * 60 * 60   # 24 hours
+_TOKEN_SECRET       = os.getenv("TOKEN_SECRET", "wm-greeksite-secret-key-2024")
 
-# Active tokens — protected by lock (multiple Flask threads read/write concurrently)
-import threading as _threading
-_active_tokens: dict  = {}
-_tokens_lock          = _threading.Lock()
+import hmac as _hmac
 
 def _valid_token(tok: str) -> bool:
+    """Verify an HMAC-signed stateless token (works across serverless invocations)."""
     if not tok:
         return False
-    with _tokens_lock:
-        issued = _active_tokens.get(tok)
-        if not issued:
+    try:
+        parts = tok.split(".")
+        if len(parts) != 3:
             return False
+        ts_hex, user_hex, sig = parts
+        issued = int(ts_hex, 16)
         if time.time() - issued > _TOKEN_TTL:
-            del _active_tokens[tok]
             return False
-        return True
+        # Verify signature
+        expected = _hmac.new(
+            _TOKEN_SECRET.encode(), f"{ts_hex}.{user_hex}".encode(), hashlib.sha256
+        ).hexdigest()[:32]
+        return _hmac.compare_digest(sig, expected)
+    except Exception:
+        return False
 
 def _issue_token() -> str:
-    tok = secrets.token_hex(32)
-    with _tokens_lock:
-        _active_tokens[tok] = time.time()
-    return tok
+    """Create an HMAC-signed stateless token: timestamp.username.signature"""
+    ts_hex = format(int(time.time()), 'x')
+    user_hex = _DASHBOARD_USERNAME.encode().hex()
+    payload = f"{ts_hex}.{user_hex}"
+    sig = _hmac.new(
+        _TOKEN_SECRET.encode(), payload.encode(), hashlib.sha256
+    ).hexdigest()[:32]
+    return f"{payload}.{sig}"
 
 def _revoke_token(tok: str):
-    with _tokens_lock:
-        _active_tokens.pop(tok, None)
+    pass  # Stateless tokens can't be revoked; they expire naturally
 
 CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
 
@@ -154,15 +163,20 @@ _BUILD_VER = _build_ver()
 
 
 # ── Auth middleware ────────────────────────────────────────────────────────────
-_PUBLIC_PATHS = {"/login", "/api/login", "/login.css", "/style.css"}
+_PUBLIC_PATHS = {"/login", "/api/login", "/login.css", "/style.css", "/app.js",
+                 "/login.html", "/index.html"}
 _PUBLIC_PREFIXES = ("/web/",)
+_PUBLIC_EXTENSIONS = ('.css', '.js', '.html', '.ico', '.png', '.jpg', '.svg',
+                      '.woff', '.woff2', '.ttf', '.map')
 
 @app.before_request
 def require_auth():
     path = request.path
 
-    # Always allow static assets the login page needs
+    # Always allow static assets (CSS, JS, images, fonts)
     if path in _PUBLIC_PATHS or path.startswith(_PUBLIC_PREFIXES):
+        return None
+    if any(path.endswith(ext) for ext in _PUBLIC_EXTENSIONS):
         return None
 
     # Block server source files
