@@ -732,8 +732,6 @@ def build_entropy(ticker):
     """
     import numpy as np
     import pandas as pd
-    from sklearn.decomposition import PCA
-    from sklearn.preprocessing import StandardScaler
     from datetime import datetime, timedelta
     import warnings
     warnings.filterwarnings("ignore")
@@ -759,10 +757,14 @@ def build_entropy(ticker):
                 "current_entropy": 0, "threshold": 0, "status": "N/A"}
 
     features = data[["Close", "Entropy_Smooth", "Momentum"]].values
-    scaler   = StandardScaler()
-    scaled   = scaler.fit_transform(features)
-    pca      = PCA(n_components=2)
-    coords   = pca.fit_transform(scaled)
+    # StandardScaler equivalent (numpy only)
+    mu = features.mean(axis=0)
+    sd = features.std(axis=0) + 1e-10
+    scaled = (features - mu) / sd
+    # PCA(n_components=2) equivalent via SVD (numpy only)
+    centered = scaled - scaled.mean(axis=0)
+    U, S, Vt = np.linalg.svd(centered, full_matrices=False)
+    coords = centered @ Vt[:2].T
 
     data = data.copy()
     data["PCA1"] = coords[:, 0]   # STATE axis
