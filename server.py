@@ -12,8 +12,8 @@ from data_provider import fetch_all
 from config import TICKER as _DEFAULT_TICKER
 
 # ── Auth config (set in .env) ────────────────────────────────────────────────
-_DASHBOARD_USERNAME = os.getenv("DASHBOARD_USERNAME", "kaali4426")
-_DASHBOARD_PASSWORD = os.getenv("DASHBOARD_PASSWORD", "war_mechine")
+_DASHBOARD_USERNAME = os.getenv("DASHBOARD_USERNAME", "Kaali4426")
+_DASHBOARD_PASSWORD = os.getenv("DASHBOARD_PASSWORD", "war_machine")
 _TOKEN_TTL          = 24 * 60 * 60   # 24 hours
 
 # Active tokens — protected by lock (multiple Flask threads read/write concurrently)
