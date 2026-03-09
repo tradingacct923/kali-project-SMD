@@ -18,6 +18,7 @@ _TOKEN_TTL          = 24 * 60 * 60   # 24 hours
 _TOKEN_SECRET       = os.getenv("TOKEN_SECRET", "wm-greeksite-secret-key-2024")
 
 import hmac as _hmac
+import threading as _threading
 
 def _valid_token(tok: str) -> bool:
     """Verify an HMAC-signed stateless token (works across serverless invocations)."""
