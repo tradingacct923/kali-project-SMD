@@ -1,0 +1,16 @@
+# ── Dashboard Login ──────────────────────────────────────────────
+DASHBOARD_USERNAME=Kaali4426
+DASHBOARD_PASSWORD=war_machine
+
+# ── Tradier API ─────────────────────────────────────────────────
+TRADIER_TOKEN=BkkUX4cdeBXLkAejHAm8mKeOGTzt
+
+# ── TopStepX / ProjectX Credentials ────────────────────────────
+TOPSTEPX_USERNAME=Kaalicei@yahoo.com
+TOPSTEPX_API_KEY=zwEQWiEVXsaXOr5ckzHx32h8CFeX3tfUlJ2iAs0xOP4=
+TOPSTEPX_PASSWORD=Ajaiarun21@
+
+# ── TopStepX API Endpoints ──────────────────────────────────────
+TOPSTEPX_REST_BASE=https://api.topstepx.com
+TOPSTEPX_MARKET_HUB=https://rtc.topstepx.com/hubs/market
+TOPSTEPX_USER_HUB=https://rtc.topstepx.com/hubs/user
