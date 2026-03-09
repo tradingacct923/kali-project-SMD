@@ -1,0 +1,902 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <title>Altaris Dashboard</title>
+  <link rel="stylesheet" href="style.css?v=BUILD_VERSION" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+  <script src="app.js?v=BUILD_VERSION" defer></script>
+  <!-- Apply saved theme before first paint -->
+  <script>document.documentElement.setAttribute('data-theme', localStorage.getItem('dashTheme') || 'void');</script>
+</head>
+
+<body>
+
+  <!-- Refresh progress bar — sweeps left→right over each refresh interval -->
+  <div id="refresh-bar">
+    <div id="refresh-bar-inner"></div>
+  </div>
+
+  <!-- Welcome transition screen -->
+  <div id="welcome-screen">
+    <div class="ws-content">
+      <div class="ws-badge">AUTHENTICATED · CLEARANCE LEVEL: ALPHA</div>
+      <h1 class="ws-title" style="font-family:'Space Grotesk',sans-serif">Welcome Back,<br><span
+          id="ws-name">Member</span>.</h1>
+      <div class="ws-sub">Loading Altaris Dashboard · Encrypted Session Active</div>
+      <div class="ws-progress">
+        <div class="ws-progress-bar" id="ws-progress-bar"></div>
+      </div>
+      <div class="ws-status" id="ws-status">DECRYPTING MARKET STREAM/INITIALIZE...</div>
+      <div class="ws-verified">✓ INNER CIRCLE — VERIFIED</div>
+    </div>
+  </div>
+
+  <!-- Vertical sidebar -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sb-logo">
+      <span class="sb-logo-icon">⚡</span>
+      <span class="sb-logo-text">Altaris</span>
+    </div>
+    <div class="sb-section-label">MAIN</div>
+    <button class="sb-item active" data-tab="greeks"><span class="sb-icon">📊</span>Greeks Heatmaps</button>
+    <button class="sb-item" data-tab="oi"><span class="sb-icon">📈</span>Open Interest</button>
+    <div class="sb-section-label">ANALYSIS</div>
+    <button class="sb-item" data-tab="anomaly"><span class="sb-icon">⚠️</span>Anomalies</button>
+    <button class="sb-item" data-tab="vol"><span class="sb-icon">🌊</span>Volatility</button>
+    <button class="sb-item" data-tab="macro"><span class="sb-icon">🌍</span>Macro</button>
+    <div class="sb-section-label">TOOLS</div>
+    <button class="sb-item" data-tab="regime"><span class="sb-icon">🎯</span>Regime</button>
+    <button class="sb-item" data-tab="prob"><span class="sb-icon">🎲</span>Probability</button>
+    <div class="sb-section-label">ALPHA ENGINE</div>
+    <button class="sb-item" data-tab="inference"><span class="sb-icon">🧠</span>Inference</button>
+    <button class="sb-item" data-tab="crashrisk"><span class="sb-icon">⚠️</span>Crash Risk</button>
+    <button class="sb-item" data-tab="flow"><span class="sb-icon">🌊</span>Flow Analysis</button>
+    <button class="sb-item" data-tab="l2"><span class="sb-icon">📡</span>Level 2</button>
+    <div class="sb-spacer"></div>
+    <div class="sb-footer" id="sb-footer">
+      <div class="sb-avatar" id="sb-avatar">?</div>
+      <div class="sb-user-info">
+        <div class="sb-user-name" id="sb-user-name">Member</div>
+        <div class="sb-user-role">Inner Circle · Alpha</div>
+      </div>
+    </div>
+  </aside>
+
+  <div class="main-content">
+    <div class="top-bar">
+      <!-- Header -->
+      <header>
+        <div class="header-left">
+          <span class="logo">⚡ Altaris</span>
+          <span class="ticker" id="ticker">—</span>
+          <span class="spot-price" id="spot">—</span>
+          <!-- Ticker switcher -->
+          <div class="ticker-switcher">
+            <button class="ts-preset" data-sym="QQQ">QQQ</button>
+            <button class="ts-preset" data-sym="SPY">SPY</button>
+            <button class="ts-preset" data-sym="IWM">IWM</button>
+            <button class="ts-preset" data-sym="AAPL">AAPL</button>
+            <input id="ticker-input" class="ts-input" type="text" maxlength="8" placeholder="symbol…" autocomplete="off"
+              spellcheck="false" />
+          </div>
+        </div>
+        <div class="header-greeting">
+          <span class="greeting-text" id="greeting-text"></span>
+          <span class="greeting-date" id="greeting-date"></span>
+        </div>
+        <div class="header-center">
+          <div class="kl-item"><span class="kl-label cw">Call Wall</span><span class="kl-value" id="callWall">—</span>
+          </div>
+          <div class="kl-item"><span class="kl-label pw">Put Wall</span><span class="kl-value" id="putWall">—</span>
+          </div>
+          <div class="kl-item"><span class="kl-label mw">Major Wall</span><span class="kl-value" id="majorWall">—</span>
+          </div>
+          <div class="kl-item"><span class="kl-label mp">Max Pain</span><span class="kl-value" id="maxPain">—</span>
+          </div>
+        </div>
+        <div class="header-right">
+          <span class="timestamp" id="timestamp">—</span>
+          <span class="badge" id="badge">LIVE</span>
+          <button class="header-settings-btn" id="header-settings-btn" data-tab="settings">⚙ Settings</button>
+        </div>
+      </header>
+
+      <!-- Dashboard Summary Strip -->
+      <div class="dash-summary">
+        <div class="dash-metric"><span class="dash-metric-label">Spot</span><span class="dash-metric-val"
+            id="ds-spot">—</span></div>
+        <div class="dash-metric"><span class="dash-metric-label">ATM IV</span><span class="dash-metric-val"
+            id="ds-iv">—</span></div>
+        <div class="dash-metric"><span class="dash-metric-label">P/C Ratio</span><span class="dash-metric-val"
+            id="ds-pcr">—</span></div>
+        <div class="dash-metric"><span class="dash-metric-label">Max Pain</span><span class="dash-metric-val"
+            id="ds-mp">—</span></div>
+        <div class="dash-metric"><span class="dash-metric-label">Call Wall</span><span class="dash-metric-val"
+            id="ds-cw">—</span></div>
+        <div class="dash-metric"><span class="dash-metric-label">Put Wall</span><span class="dash-metric-val"
+            id="ds-pw">—</span></div>
+        <div class="dash-metric"><span class="dash-metric-label">GEX Flip</span><span class="dash-metric-val"
+            id="ds-gflip">—</span></div>
+        <div class="dash-metric"><span class="dash-metric-label">Net DEX</span><span class="dash-metric-val"
+            id="ds-ndex">—</span></div>
+      </div>
+    </div>
+
+    <!-- Greeks Heatmaps Tab -->
+    <div id="tab-greeks" class="tab-content active">
+
+      <!-- ══ Trio Heatmap Row ══════════════════════════════════════════════ -->
+      <div class="trio-hm-row">
+
+        <div class="trio-hm-col">
+          <div class="trio-label">DEX · Delta Exposure
+            <button class="hm-palette-btn" data-hm-picker="dex"
+              onclick="cycleHmPalette('dex', window._lastHmBuildData?.dex_hm, window._lastHmSpot)">⬡ dex</button>
+          </div>
+          <div class="trio-legend-bar">
+            <div class="hm-legend" id="dex-legend"></div>
+          </div>
+          <div class="hm-body" id="hm-dex"></div>
+        </div>
+
+        <div class="trio-hm-col">
+          <div class="trio-label">GEX · Gamma Exposure
+            <button class="hm-palette-btn" data-hm-picker="gex"
+              onclick="cycleHmPalette('gex', window._lastHmBuildData?.gex_hm, window._lastHmSpot)">⬡ simple</button>
+          </div>
+          <div class="trio-legend-bar">
+            <div class="hm-legend" id="gex-legend"></div>
+          </div>
+          <div class="hm-body" id="hm-gex"></div>
+        </div>
+
+      </div>
+
+      <!-- 5+6 · Vanna Exposure + Charm Exposure — directly below DEX/GEX -->
+      <div class="trio-hm-row">
+
+        <div class="trio-hm-col">
+          <div class="trio-label">VannaEX · Vanna Exposure
+            <button class="hm-palette-btn" data-hm-picker="vannex"
+              onclick="cycleHmPalette('vannex', window._lastHmBuildData?.vannex_hm, window._lastHmSpot)">&#x29e1;
+              vannex</button>
+          </div>
+          <div class="trio-legend-bar">
+            <div class="hm-legend" id="vannex-legend"></div>
+          </div>
+          <div class="hm-body" id="hm-vannex"></div>
+        </div>
+
+        <div class="trio-hm-col">
+          <div class="trio-label">CharmEX · Charm Exposure
+            <button class="hm-palette-btn" data-hm-picker="cex"
+              onclick="cycleHmPalette('cex', window._lastHmBuildData?.cex_hm, window._lastHmSpot)">&#x29e1; cex</button>
+          </div>
+          <div class="trio-legend-bar">
+            <div class="hm-legend" id="cex-legend"></div>
+          </div>
+          <div class="hm-body" id="hm-cex"></div>
+        </div>
+
+      </div>
+
+      <!-- ══ Strike Exposure Grid (2×2) ═══════════════════════════════════════ -->
+      <div class="strike-grid">
+        <div class="strike-card">
+          <div class="trio-sub-label">DEX · Net $ Delta</div>
+          <div class="chart-wrap" style="height:420px"><canvas id="chart-dex-bar"></canvas></div>
+        </div>
+        <div class="strike-card">
+          <div class="trio-sub-label">GEX · Net $ Gamma</div>
+          <div class="chart-wrap" style="height:420px"><canvas id="chart-gex-bar"></canvas></div>
+        </div>
+        <div class="strike-card">
+          <div class="trio-sub-label">VEX · Net $ Vega</div>
+          <div class="chart-wrap" style="height:420px"><canvas id="chart-vex-bar-main"></canvas></div>
+        </div>
+        <div class="strike-card">
+          <div class="trio-sub-label">REX · Net $ Rho</div>
+          <div class="chart-wrap" style="height:420px"><canvas id="chart-rex-bar"></canvas></div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Probability Tab -->
+    <div id="tab-prob" class="tab-content">
+
+      <!-- Top bar: mode buttons + live metrics -->
+      <div class="prob-topbar">
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <div class="pill-group">
+            <button class="pill active" data-prob-mode="pdf" onclick="setProbMode('pdf',this)"
+              title="Where is price most likely to land?">&#x1f525; Hotspot</button>
+            <button class="pill" data-prob-mode="cdf_above" onclick="setProbMode('cdf_above',this)"
+              title="Probability price finishes above this strike">&#x2197; Chance Finish Above</button>
+            <button class="pill" data-prob-mode="cdf_below" onclick="setProbMode('cdf_below',this)"
+              title="Probability price finishes below this strike">&#x2198; Chance Finish Below</button>
+          </div>
+          <div id="prob-mode-desc"
+            style="font:10px 'JetBrains Mono',monospace;color:rgba(140,160,210,.7);padding:2px 4px">
+            Brighter = more likely price lands here at expiry
+          </div>
+        </div>
+        <div id="prob-metrics" class="prob-metrics-bar"></div>
+      </div>
+
+      <!-- Hidden inputs that renderProb() reads (now auto-managed by JS) -->
+      <input id="prob-iv" type="hidden" value="25">
+      <input id="prob-rf" type="hidden" value="5">
+      <input id="prob-range" type="hidden" value="20">
+      <input id="prob-dte" type="hidden" value="90">
+
+      <!-- Full-width charts -->
+      <div class="prob-charts" style="padding:0 16px 16px">
+        <div class="prob-chart-block">
+          <div class="trio-label" style="margin-bottom:6px">Probability Heatmap &mdash; Strike &times; DTE (days)</div>
+          <div id="plot-prob-hm" style="width:100%;height:440px"></div>
+        </div>
+        <div class="prob-chart-block">
+          <div class="trio-label" style="margin-bottom:6px">Lognormal Probability Surface</div>
+          <div id="plot-prob-3d" style="width:100%;height:500px"></div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- OI Tab -->
+    <div id="tab-oi" class="tab-content">
+      <div class="oi-row">
+        <!-- Short-term OI (existing) -->
+        <div class="chart-card oi-left">
+          <div class="card-header">
+            <span class="card-title">📈 Open Interest</span>
+            <span class="card-sub">Near-term by Strike</span>
+            <span id="oi-pc-ratio"
+              style="margin-left:auto;font-size:.72rem;font-weight:700;letter-spacing:.03em;"></span>
+          </div>
+          <div class="chart-wrap" style="height:600px"><canvas id="chart-oi"></canvas></div>
+        </div>
+
+        <!-- 365 DTE OI chart -->
+        <div class="chart-card oi-right">
+          <div class="card-header">
+            <span class="card-title">📊 OI — All Expirations</span>
+            <span class="card-sub">Up to 365 DTE · colored by expiry</span>
+          </div>
+          <div id="oi365-loader" class="oi365-loader" style="display:none"></div>
+          <div class="oi365-wrap">
+            <div class="chart-wrap oi365-chart" style="height:600px"><canvas id="chart-oi365"></canvas></div>
+            <div id="oi365-legend" class="oi365-legend"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Anomaly Tab -->
+    <div id="tab-anomaly" class="tab-content">
+      <div class="chart-card full">
+        <div class="card-header">
+          <span class="card-title">🔺 Statistical Anomalies</span>
+          <span class="card-sub">NASDAQ 100 | Z-Score &gt; 2.09 | 5m</span>
+        </div>
+        <div class="chart-wrap" style="height:480px"><canvas id="chart-anomaly"></canvas></div>
+      </div>
+
+      <!-- ── HIRO: MM Hedging Flow ── -->
+      <div class="chart-card full" style="margin-top:16px">
+        <div class="card-header">
+          <span class="card-title">📈 HIRO — MM Hedging Flow</span>
+          <span class="card-sub">Total Net GEX × Intraday ΔPrice | $M</span>
+          <span id="hiro-direction" class="regime-badge neutral-badge">—</span>
+        </div>
+        <div class="hiro-hud">
+          <div class="hiro-stat"><span class="hiro-label">Current HIRO</span><span class="hiro-val"
+              id="hiro-current">—</span></div>
+          <div class="hiro-stat"><span class="hiro-label">Net GEX / pt</span><span class="hiro-val"
+              id="hiro-gex">—</span>
+          </div>
+          <div class="hiro-interpret" id="hiro-interpret">—</div>
+        </div>
+        <div class="chart-wrap" style="height:300px"><canvas id="chart-hiro"></canvas></div>
+      </div>
+
+      <!-- ── Market Topology + Entropy Manifold ── -->
+      <div class="regime-row">
+        <div class="chart-card regime-half">
+          <div class="card-header">
+            <span class="card-title">🌐 Market Topology</span>
+            <span class="card-sub">3-D Cluster Map | Trend × Momentum × Volatility</span>
+            <span id="topo-regime" class="regime-badge neutral-badge">—</span>
+          </div>
+          <div id="topology-3d" style="height:460px;width:100%"></div>
+        </div>
+        <div class="chart-card regime-half">
+          <div class="card-header">
+            <span class="card-title">🌀 Entropy Manifold</span>
+            <span class="card-sub">PCA Phase Space | STATE × MOMENTUM × CHAOS</span>
+            <span id="entropy-status" class="regime-badge neutral-badge">—</span>
+          </div>
+          <div class="entropy-hud">
+            <span>Entropy: <strong id="entropy-level">—</strong></span>
+            <span style="margin-left:18px">Threshold: <strong id="entropy-thresh">—</strong></span>
+          </div>
+          <div id="entropy-3d" style="height:430px;width:100%"></div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Volatility Tab -->
+    <div id="tab-vol" class="tab-content">
+
+      <!-- ── IVR / HV Stat Bar ── -->
+      <div class="ivr-bar">
+        <div class="ivr-stat">
+          <div class="ivr-label"
+            title="Ranks current ATM IV against the 1-year realized vol (HV30) range. Not a true IV Rank — that requires historical IV data.">
+            HV-Rank <span style="font-size:.65rem;opacity:.6">ⓘ</span></div>
+          <div class="ivr-value" id="stat-ivr">—</div>
+          <div class="ivr-sub" id="stat-ivr-sub">ATM IV vs 1yr HV range</div>
+        </div>
+        <div class="ivr-divider"></div>
+        <div class="ivr-stat">
+          <div class="ivr-label">ATM IV</div>
+          <div class="ivr-value" id="stat-atm-iv">—</div>
+        </div>
+        <div class="ivr-divider"></div>
+        <div class="ivr-stat">
+          <div class="ivr-label">HV10 / HV20 / HV30</div>
+          <div class="ivr-value" id="stat-hvs">—</div>
+        </div>
+        <div class="ivr-divider"></div>
+        <div class="ivr-stat">
+          <div class="ivr-label">Vol Premium</div>
+          <div class="ivr-value" id="stat-vp">—</div>
+          <div class="ivr-sub">IV − HV30</div>
+        </div>
+        <div class="ivr-divider"></div>
+        <div class="ivr-stat">
+          <div class="ivr-label">VIX Term Structure</div>
+          <div class="ivr-vix-row">
+            <span class="ivr-vix-item" id="stat-vix9d">9D —</span>
+            <span class="ivr-vix-arr">→</span>
+            <span class="ivr-vix-item" id="stat-vix">VIX —</span>
+            <span class="ivr-vix-arr">→</span>
+            <span class="ivr-vix-item" id="stat-vix3m">3M —</span>
+          </div>
+          <div class="ivr-sub" id="stat-ts-shape"></div>
+        </div>
+        <div class="ivr-divider"></div>
+        <div class="ivr-stat ivr-regime-cell">
+          <div class="ivr-label">Regime</div>
+          <div class="ivr-regime" id="stat-regime">—</div>
+        </div>
+      </div>
+
+      <div class="vol-grid">
+
+        <div class="chart-card">
+          <div class="card-header">
+            <span class="card-title">📐 IV Surface</span>
+            <span class="card-sub">Implied Volatility · Strike × Expiration</span>
+            <button class="hm-palette-btn" data-iv-palette onclick="cycleIVPalette()" title="Change surface colorscale">⧡ quant</button>
+          </div>
+          <div id="iv-surface" style="height:480px;padding:0"></div>
+        </div>
+
+        <div class="chart-card">
+          <div class="card-header">
+            <div>
+              <span class="card-title">〽 IV Skew</span>
+              <span class="card-sub" id="skew-label">Nearest Expiry</span>
+            </div>
+            <div id="skew-signal" style="font-size:.72rem;font-weight:600"></div>
+          </div>
+          <div class="chart-wrap" style="height:520px"><canvas id="chart-skew"></canvas></div>
+        </div>
+
+        <div class="chart-card full">
+          <div class="card-header">
+            <span class="card-title">📈 Realized Volatility — HV10 / HV20 / HV30</span>
+            <span class="card-sub">90-day rolling realized vol vs current ATM IV</span>
+          </div>
+          <div class="chart-wrap" style="height:380px"><canvas id="chart-hv"></canvas></div>
+        </div>
+
+        <div class="chart-card full">
+          <div class="card-header">
+            <span class="card-title">📐 Return 5D Intraday Kurtosis — 90 days</span>
+            <span class="card-sub">Rolling 30-day excess kurtosis · normal = 0 · fat tails > 0</span>
+            <span id="kurt-badge"
+              style="font-size:.72rem;font-weight:700;padding:2px 8px;border-radius:4px;margin-left:auto"></span>
+          </div>
+          <div class="chart-wrap" style="height:220px"><canvas id="chart-kurtosis"></canvas></div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Macro Tab -->
+    <div id="tab-macro" class="tab-content">
+
+      <!-- ── Yields strip ───────────────────────────────────────────────────── -->
+      <div class="macro-stat-strip" id="yields-strip">
+        <div class="mss-label">YIELDS <span class="mss-src" id="yields-src">FRED · daily</span></div>
+        <div class="mss-items">
+          <div class="mss-item">
+            <span class="mss-name">2Y</span>
+            <span class="mss-val" id="yield-2y">—</span>
+            <span class="mss-unit">%</span>
+          </div>
+          <div class="mss-sep">·</div>
+          <div class="mss-item">
+            <span class="mss-name">10Y</span>
+            <span class="mss-val" id="yield-10y">—</span>
+            <span class="mss-unit">%</span>
+          </div>
+          <div class="mss-sep">·</div>
+          <div class="mss-item">
+            <span class="mss-name">TIPS Real</span>
+            <span class="mss-val" id="yield-tips">—</span>
+            <span class="mss-unit">%</span>
+          </div>
+          <div class="mss-sep">·</div>
+          <div class="mss-item">
+            <span class="mss-name">2s10s Spread</span>
+            <span class="mss-val" id="yield-spread">—</span>
+            <span class="mss-unit">%</span>
+            <span class="mss-tag" id="yield-curve-label">—</span>
+          </div>
+          <div class="mss-sep">·</div>
+          <div class="mss-item">
+            <span class="mss-name">Inf Breakeven</span>
+            <span class="mss-val" id="yield-breakeven">—</span>
+            <span class="mss-unit">%</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Liquidity strip ────────────────────────────────────────────────── -->
+      <div class="macro-stat-strip macro-liq-strip" id="liq-strip">
+        <div class="mss-label">LIQUIDITY <span class="mss-src" id="liq-src">FRED · weekly</span></div>
+        <div class="mss-items">
+          <div class="mss-item">
+            <span class="mss-name">Fed Balance Sheet</span>
+            <span class="mss-val" id="liq-fed-bs">—</span>
+            <span class="mss-unit">T</span>
+            <span class="mss-bias" id="liq-fed-bs-bias">—</span>
+          </div>
+          <div class="mss-sep">·</div>
+          <div class="mss-item">
+            <span class="mss-name">Reverse Repo</span>
+            <span class="mss-val" id="liq-repo">—</span>
+            <span class="mss-unit">B</span>
+            <span class="mss-bias" id="liq-repo-bias">—</span>
+          </div>
+          <div class="mss-sep">·</div>
+          <div class="mss-item">
+            <span class="mss-name">TGA</span>
+            <span class="mss-val" id="liq-tga">—</span>
+            <span class="mss-unit">B</span>
+            <span class="mss-bias" id="liq-tga-bias">—</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Bottom row: NEWS | ECON | MACRO BIAS ──────────────────────────── -->
+      <div class="macro-grid">
+        <div class="macro-col">
+          <div class="macro-col-header">NEWS</div>
+          <div id="macro-news" class="macro-news-list"></div>
+        </div>
+        <div class="macro-col">
+          <div class="macro-col-header">ECON</div>
+          <div id="macro-econ" class="macro-econ-list"></div>
+        </div>
+        <div class="macro-col macro-col-narrow">
+          <div class="macro-col-header">MACRO BIAS</div>
+          <div class="macro-bias-card">
+            <div id="macro-bias-label" class="macro-bias-label">—</div>
+            <div id="macro-bias-score" class="macro-bias-score"></div>
+            <div class="macro-bias-breakdown">
+              <div class="bias-row"><span class="bias-key">News</span><span id="b-news">—</span></div>
+              <div class="bias-row"><span class="bias-key">Econ</span><span id="b-econ">—</span></div>
+              <div class="bias-divider"></div>
+              <div class="bias-row"><span class="bias-key">HTF</span><span id="b-htf">—</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Settings Tab -->
+    <div id="tab-settings" class="tab-content">
+      <div class="settings-wrap">
+
+        <!-- ── Theme ─────────────────────────────────────── -->
+        <div class="settings-section">
+          <div class="settings-section-title">&#127775; Colour Theme</div>
+          <div class="settings-field">
+            <div class="settings-themes">
+              <div class="theme-card selected" data-theme-id="void" onclick="applyTheme('void',this)">
+                <div class="theme-swatch ts-void"></div>
+                <span class="theme-name">Void</span>
+              </div>
+              <div class="theme-card" data-theme-id="midnight" onclick="applyTheme('midnight',this)">
+                <div class="theme-swatch ts-midnight"></div>
+                <span class="theme-name">Midnight</span>
+              </div>
+              <div class="theme-card" data-theme-id="blood" onclick="applyTheme('blood',this)">
+                <div class="theme-swatch ts-blood"></div>
+                <span class="theme-name">Blood</span>
+              </div>
+              <div class="theme-card" data-theme-id="matrix" onclick="applyTheme('matrix',this)">
+                <div class="theme-swatch ts-matrix"></div>
+                <span class="theme-name">Matrix</span>
+              </div>
+              <div class="theme-card" data-theme-id="dusk" onclick="applyTheme('dusk',this)">
+                <div class="theme-swatch ts-dusk"></div>
+                <span class="theme-name">Dusk</span>
+              </div>
+              <div class="theme-card" data-theme-id="aurora" onclick="applyTheme('aurora',this)">
+                <div class="theme-swatch ts-aurora"></div>
+                <span class="theme-name">Aurora</span>
+              </div>
+              <div class="theme-card" data-theme-id="forge" onclick="applyTheme('forge',this)">
+                <div class="theme-swatch ts-forge"></div>
+                <span class="theme-name">Forge</span>
+              </div>
+              <div class="theme-card" data-theme-id="ghost" onclick="applyTheme('ghost',this)">
+                <div class="theme-swatch ts-ghost"></div>
+                <span class="theme-name">Ghost</span>
+              </div>
+              <div class="theme-card" data-theme-id="tokyo" onclick="applyTheme('tokyo',this)">
+                <div class="theme-swatch ts-tokyo"></div>
+                <span class="theme-name">Tokyo</span>
+              </div>
+              <div class="theme-card" data-theme-id="abyss" onclick="applyTheme('abyss',this)">
+                <div class="theme-swatch ts-abyss"></div>
+                <span class="theme-name">Abyss</span>
+              </div>
+              <div class="theme-card" data-theme-id="terminal" onclick="applyTheme('terminal',this)">
+                <div class="theme-swatch ts-terminal"></div>
+                <span class="theme-name">Terminal</span>
+              </div>
+              <div class="theme-card" data-theme-id="arctic" onclick="applyTheme('arctic',this)">
+                <div class="theme-swatch ts-arctic"></div>
+                <span class="theme-name">Arctic</span>
+              </div>
+              <div class="theme-card" data-theme-id="sapphire" onclick="applyTheme('sapphire',this)">
+                <div class="theme-swatch ts-sapphire"></div>
+                <span class="theme-name">Sapphire</span>
+              </div>
+
+              <div class="theme-card" data-theme-id="jade" onclick="applyTheme('jade',this)">
+                <div class="theme-swatch ts-jade"></div>
+                <span class="theme-name">Jade</span>
+              </div>
+              <div class="theme-card" data-theme-id="neon" onclick="applyTheme('neon',this)">
+                <div class="theme-swatch ts-neon"></div>
+                <span class="theme-name">Neon</span>
+              </div>
+              <div class="theme-card" data-theme-id="mono" onclick="applyTheme('mono',this)">
+                <div class="theme-swatch ts-mono"></div>
+                <span class="theme-name">Mono</span>
+              </div>
+              <div class="theme-card" data-theme-id="rust" onclick="applyTheme('rust',this)">
+                <div class="theme-swatch ts-rust"></div>
+                <span class="theme-name">Rust</span>
+              </div>
+              <div class="theme-card" data-theme-id="coral" onclick="applyTheme('coral',this)">
+                <div class="theme-swatch ts-coral"></div>
+                <span class="theme-name">Coral</span>
+              </div>
+              <div class="theme-card" data-theme-id="storm" onclick="applyTheme('storm',this)">
+                <div class="theme-swatch ts-storm"></div>
+                <span class="theme-name">Storm</span>
+              </div>
+              <div class="theme-card" data-theme-id="acid" onclick="applyTheme('acid',this)">
+                <div class="theme-swatch ts-acid"></div>
+                <span class="theme-name">Acid</span>
+              </div>
+
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Display ───────────────────────────────────── -->
+        <div class="settings-section">
+          <div class="settings-section-title">&#9681; Display</div>
+
+          <div class="settings-field">
+            <label class="settings-label">Density</label>
+            <div class="settings-desc">Controls heatmap cell height and card padding</div>
+            <div class="pill-group">
+              <button class="pill-opt" data-density-opt="compact" onclick="setDensity('compact',this)">Compact</button>
+              <button class="pill-opt active" data-density-opt="comfortable"
+                onclick="setDensity('comfortable',this)">Comfortable</button>
+              <button class="pill-opt" data-density-opt="spacious"
+                onclick="setDensity('spacious',this)">Spacious</button>
+            </div>
+          </div>
+
+          <div class="settings-field" style="margin-top:14px">
+            <label class="settings-label">Animation Speed</label>
+            <div class="settings-desc">Chart transition duration</div>
+            <div class="pill-group">
+              <button class="pill-opt" data-anim-opt="fast" onclick="setAnim('fast',this)">Fast</button>
+              <button class="pill-opt active" data-anim-opt="normal" onclick="setAnim('normal',this)">Normal</button>
+              <button class="pill-opt" data-anim-opt="off" onclick="setAnim('off',this)">Off</button>
+            </div>
+          </div>
+
+          <div class="settings-field" style="margin-top:14px">
+            <label class="settings-label">Number Format</label>
+            <div class="settings-desc">How large numbers are displayed</div>
+            <div class="pill-group">
+              <button class="pill-opt active" data-numfmt-opt="auto" onclick="setNumFmt('auto',this)">Auto</button>
+              <button class="pill-opt" data-numfmt-opt="konly" onclick="setNumFmt('konly',this)">K/M Only</button>
+              <button class="pill-opt" data-numfmt-opt="full" onclick="setNumFmt('full',this)">Full</button>
+            </div>
+          </div>
+
+          <div class="settings-field" style="margin-top:14px">
+            <label class="settings-label">Chart Line Width</label>
+            <div class="settings-desc">Thickness of line chart strokes</div>
+            <div class="pill-group">
+              <button class="pill-opt" data-linew-opt="1" onclick="setLineW('1',this)">Thin</button>
+              <button class="pill-opt active" data-linew-opt="2" onclick="setLineW('2',this)">Normal</button>
+              <button class="pill-opt" data-linew-opt="3" onclick="setLineW('3',this)">Thick</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Data ─────────────────────────────────────── -->
+        <div class="settings-section">
+          <div class="settings-section-title">&#9881; Data</div>
+
+          <div class="settings-field settings-row2">
+            <div>
+              <label class="settings-label" for="cfg-strike-range">Strike Range (&#177;)</label>
+              <div class="settings-desc">Strikes shown above &amp; below spot</div>
+              <input id="cfg-strike-range" class="settings-input" type="number" min="5" max="100" step="5" value="30">
+            </div>
+            <div>
+              <label class="settings-label" for="cfg-max-exp">Max Expirations</label>
+              <div class="settings-desc">Expiry dates to load</div>
+              <input id="cfg-max-exp" class="settings-input" type="number" min="1" max="12" step="1" value="3">
+            </div>
+          </div>
+
+          <div class="settings-field" style="margin-top:12px">
+            <label class="settings-label" for="cfg-refresh">Refresh Interval (s)</label>
+            <div class="settings-desc">Auto-update frequency</div>
+            <input id="cfg-refresh" class="settings-input" type="number" min="5" max="300" step="5" value="30">
+          </div>
+
+          <div class="settings-field" style="margin-top:14px">
+            <label class="settings-label">Auto-open Tab</label>
+            <div class="settings-desc">Which tab loads when you open the dashboard</div>
+            <div class="pill-group">
+              <button class="pill-opt active" data-autotab-opt="greeks"
+                onclick="setAutoTab('greeks',this)">Altaris</button>
+              <button class="pill-opt" data-autotab-opt="oi" onclick="setAutoTab('oi',this)">OI</button>
+              <button class="pill-opt" data-autotab-opt="anomaly"
+                onclick="setAutoTab('anomaly',this)">Anomalies</button>
+              <button class="pill-opt" data-autotab-opt="vol" onclick="setAutoTab('vol',this)">Vol</button>
+              <button class="pill-opt" data-autotab-opt="macro" onclick="setAutoTab('macro',this)">Macro</button>
+              <button class="pill-opt" data-autotab-opt="regime" onclick="setAutoTab('regime',this)">Regime</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Panels ────────────────────────────────────── -->
+        <div class="settings-section">
+          <div class="settings-section-title">&#9638; Visible Panels</div>
+          <div class="settings-field settings-toggles">
+            <label class="settings-toggle-item"><input type="checkbox" id="panel-gex" checked><span>GEX</span></label>
+            <label class="settings-toggle-item"><input type="checkbox" id="panel-dex" checked><span>DEX</span></label>
+            <label class="settings-toggle-item"><input type="checkbox" id="panel-vex" checked><span>VEX</span></label>
+            <label class="settings-toggle-item"><input type="checkbox" id="panel-tex" checked><span>TEX</span></label>
+            <label class="settings-toggle-item"><input type="checkbox" id="panel-vannex"
+                checked><span>VannaEX</span></label>
+            <label class="settings-toggle-item"><input type="checkbox" id="panel-cex"
+                checked><span>CharmEX</span></label>
+            <label class="settings-toggle-item"><input type="checkbox" id="panel-oi" checked><span>Open
+                Interest</span></label>
+            <label class="settings-toggle-item"><input type="checkbox" id="panel-max_pain" checked><span>Max
+                Pain</span></label>
+          </div>
+        </div>
+
+        <!-- hidden inputs for JS compat -->
+        <input id="cfg-ticker" type="hidden">
+        <input id="cfg-div" type="hidden" value="0.005">
+        <input id="cfg-opts-provider" type="hidden" value="tradier">
+        <input id="cfg-opts-key" type="hidden">
+        <input id="cfg-av-key" type="hidden">
+
+        <!-- Save -->
+        <div class="settings-actions">
+          <button id="settings-save-btn" class="settings-save-btn">&#10003;&nbsp; Save &amp; Apply</button>
+          <span id="settings-msg" class="settings-msg"></span>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ── Regime Score Tab ──────────────────────────────────────────────── -->
+    <div id="tab-regime" class="tab-content">
+      <div class="regime-grid">
+
+        <!-- Current regime HUD -->
+        <div class="chart-card">
+          <div class="card-header">
+            <span class="card-title">&#9889; Regime Score</span>
+            <span id="regime-badge" class="regime-badge">&#8212;</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:24px;padding:16px 20px">
+            <div>
+              <div style="font-size:.65rem;color:var(--dim);text-transform:uppercase;letter-spacing:.6px">Pro Score
+              </div>
+              <div id="regime-score-val"
+                style="font-family:'JetBrains Mono',monospace;font-size:2.2rem;font-weight:700;color:var(--text)">
+                &#8212;
+              </div>
+            </div>
+            <div
+              style="flex:1;border-left:1px solid var(--border);padding-left:20px;display:flex;flex-direction:column;gap:6px">
+              <div style="font-size:.7rem;color:var(--dim)">Score = (Close &#8722; EMA50) &#247; ATR50 &#215; 20</div>
+              <div style="font-size:.7rem;color:var(--dim)">&#62; +25 &#8594; <span
+                  style="color:var(--green)">Directional
+                  Bullish</span></div>
+              <div style="font-size:.7rem;color:var(--dim)">&#60; &#8722;25 &#8594; <span
+                  style="color:var(--red)">Directional Bearish</span></div>
+              <div style="font-size:.7rem;color:var(--dim)">Between &#8594; <span style="color:var(--cyan)">Balance /
+                  Chop</span></div>
+              <div id="regime-hud-checks" style="margin-top:8px;font-family:'JetBrains Mono',monospace"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Price + EMA chart -->
+        <div class="chart-card">
+          <div class="card-header">
+            <span class="card-title">Price vs EMA-50</span>
+            <span class="card-sub" id="regime-ticker-sub"></span>
+          </div>
+          <div class="chart-wrap" style="height:340px"><canvas id="chart-regime-price"></canvas></div>
+        </div>
+
+        <!-- Score oscillator chart -->
+        <div class="chart-card" style="grid-column:1/-1">
+          <div class="card-header">
+            <span class="card-title">ATR-Normalised Regime Score</span>
+            <span class="card-sub">&#177;25 = Breakout threshold</span>
+          </div>
+          <div class="chart-wrap" style="height:300px"><canvas id="chart-regime-score"></canvas></div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ── Inference Engine Tab ──────────────────────────────────────────── -->
+    <div id="tab-inference" class="tab-content">
+      <div class="chart-card full" style="margin-bottom:16px">
+        <div class="card-header">
+          <span class="card-title">🧠 Inference Engine — All 8 Alpha Frameworks</span>
+          <span class="card-sub">Real-time signal aggregation from research-backed models</span>
+          <button id="inference-refresh-btn" class="hm-palette-btn" onclick="loadInference()" style="margin-left:auto">⟳ Refresh</button>
+        </div>
+        <div id="inference-grid" class="inference-grid" style="padding:16px;display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px">
+          <div style="color:var(--dim);padding:40px;text-align:center">Click tab to load signals...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Crash Risk Tab ──────────────────────────────────────────── -->
+    <div id="tab-crashrisk" class="tab-content">
+      <div class="chart-card full">
+        <div class="card-header">
+          <span class="card-title">⚠️ Crash Risk — Sornette + Power-Law Tail</span>
+          <span class="card-sub">LPPL bubble detection & fat tail monitoring</span>
+        </div>
+        <div id="crashrisk-content" style="padding:16px">
+          <div style="color:var(--dim);padding:40px;text-align:center">Click tab to load crash risk...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Flow Analysis Tab ──────────────────────────────────────────── -->
+    <div id="tab-flow" class="tab-content">
+      <div class="chart-card full">
+        <div class="card-header">
+          <span class="card-title">🌊 Flow Analysis — Entropy, Causality, Herding</span>
+          <span class="card-sub">Transfer Entropy · Shannon · Reynolds · Ising</span>
+        </div>
+        <div id="flow-content" style="padding:16px">
+          <div style="color:var(--dim);padding:40px;text-align:center">Click tab to load flow analysis...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Level 2 Tab ──────────────────────────────────────────────── -->
+    <div id="tab-l2" class="tab-content">
+
+      <!-- L2 Header Strip -->
+      <div class="l2-header-strip">
+        <div class="l2-status">
+          <span class="l2-dot" id="l2-status-dot"></span>
+          <span id="l2-status-text">DISCONNECTED</span>
+        </div>
+        <div class="l2-symbol-prices" id="l2-symbol-prices"></div>
+      </div>
+
+      <!-- Imbalance Gauges -->
+      <div class="l2-imbalance-row" id="l2-imbalance-row"></div>
+
+      <!-- DOM + Tape Row -->
+      <div class="l2-main-row">
+
+        <!-- DOM Ladder -->
+        <div class="chart-card l2-dom-card">
+          <div class="card-header">
+            <span class="card-title">📊 DOM Ladder — NQ</span>
+            <span class="card-sub" id="l2-dom-stats">bids: — asks: —</span>
+          </div>
+          <div class="l2-dom-ladder" id="l2-dom-ladder">
+            <div class="l2-dom-head">
+              <span class="l2-dom-col">Vol</span>
+              <span class="l2-dom-col l2-dom-price-col">Price</span>
+              <span class="l2-dom-col">Vol</span>
+            </div>
+            <div class="l2-dom-body" id="l2-dom-body"></div>
+          </div>
+        </div>
+
+        <!-- Trade Tape -->
+        <div class="chart-card l2-tape-card">
+          <div class="card-header">
+            <span class="card-title">🔴🟢 Trade Tape</span>
+            <span class="card-sub" id="l2-tape-count">0 prints</span>
+          </div>
+          <div class="l2-tape" id="l2-tape">
+            <div class="l2-tape-head">
+              <span>Time</span><span>Price</span><span>Size</span><span>Side</span>
+            </div>
+            <div class="l2-tape-body" id="l2-tape-body"></div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Signal Cards Grid -->
+      <div class="chart-card full" style="margin-top:12px">
+        <div class="card-header">
+          <span class="card-title">🧠 Framework Signals</span>
+          <span class="card-sub">Live computation from DOM + Trade data</span>
+        </div>
+        <div class="l2-signals-grid" id="l2-signals-grid"></div>
+      </div>
+
+      <!-- Price History Chart -->
+      <div class="chart-card full" style="margin-top:12px">
+        <div class="card-header">
+          <span class="card-title">📈 NQ Price History</span>
+          <span class="card-sub" id="l2-history-count">0 bars</span>
+        </div>
+        <div class="chart-wrap" style="height:300px"><canvas id="chart-l2-price"></canvas></div>
+      </div>
+
+    </div>
+
+  </div>
+</body>
+<script src="app.js"></script>
+
+</html>

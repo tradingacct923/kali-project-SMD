@@ -1,0 +1,25 @@
+{
+  "ticker": "QQQ",
+  "options_api_key": "",
+  "options_api_provider": "tradier",
+  "alpha_vantage_key": "",
+  "strike_range": 30,
+  "max_expirations": 3,
+  "refresh_interval": 30,
+  "risk_free_rate": 0.045,
+  "dividend_yield": 0.005,
+  "heatmap_pos_color": "#2ecc8a",
+  "heatmap_neg_color": "#e8435a",
+  "heatmap_neutral_color": "#2a2f45",
+  "panels_visible": {
+    "gex": true,
+    "dex": true,
+    "vex": true,
+    "tex": true,
+    "vannex": true,
+    "cex": true,
+    "oi": true,
+    "max_pain": true
+  },
+  "update_interval": 60
+}

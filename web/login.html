@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+    <title>War Machine — Sign In</title>
+    <link rel="stylesheet" href="login.css" />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700&display=swap"
+        rel="stylesheet">
+    <!-- Apply saved theme before first paint -->
+    <script>document.documentElement.setAttribute('data-theme', localStorage.getItem('dashTheme') || 'void');</script>
+    <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+    <!-- Animated grid background -->
+    <canvas id="grid-canvas"></canvas>
+
+    <!-- Floating particles -->
+    <div class="particles" id="particles"></div>
+
+    <!-- Login card -->
+    <div class="login-wrapper">
+        <div class="login-card">
+            <!-- Brand -->
+            <div class="brand">
+                <div class="brand-icon">
+                    <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <circle cx="20" cy="20" r="18" stroke="url(#brandGrad)" stroke-width="2.5" opacity=".9" />
+                        <path d="M12 26 L20 12 L28 26" stroke="url(#brandGrad)" stroke-width="2.5"
+                            stroke-linecap="round" stroke-linejoin="round" fill="none" />
+                        <path d="M15 21 h10" stroke="url(#brandGrad)" stroke-width="2" stroke-linecap="round" />
+                        <defs>
+                            <linearGradient id="brandGrad" x1="0" y1="0" x2="40" y2="40">
+                                <stop offset="0%" stop-color="var(--accent, #38bdf8)" />
+                                <stop offset="100%" stop-color="var(--accent2, #a855f7)" />
+                            </linearGradient>
+                        </defs>
+                    </svg>
+                </div>
+                <h1 class="brand-name">War Machine</h1>
+                <p class="brand-sub">Options & Futures Intelligence</p>
+            </div>
+
+            <!-- Form -->
+            <form id="login-form" autocomplete="off">
+                <div class="input-group">
+                    <input type="text" id="email" required placeholder=" " autocomplete="username" />
+                    <label for="email">Username</label>
+                    <div class="input-line"></div>
+                </div>
+
+                <div class="input-group">
+                    <input type="password" id="password" required placeholder=" " autocomplete="current-password" />
+                    <label for="password">Password</label>
+                    <button type="button" class="pw-toggle" id="pw-toggle" tabindex="-1"
+                        aria-label="Show password">👁</button>
+                    <div class="input-line"></div>
+                </div>
+
+                <div class="form-meta">
+                    <label class="remember">
+                        <input type="checkbox" id="remember" />
+                        <span class="checkmark"></span>
+                        Remember me
+                    </label>
+                    <a href="#" class="forgot">Forgot password?</a>
+                </div>
+
+                <button type="submit" id="login-btn" class="login-btn">
+                    <span class="btn-text">Sign In</span>
+                    <span class="btn-spinner"></span>
+                </button>
+
+                <div class="error-msg" id="error-msg"></div>
+            </form>
+
+            <div style="text-align:center;margin-top:16px;opacity:.5;font-size:.65rem;letter-spacing:.5px;color:var(--dim,#6b7a99)">
+                <span style="display:inline-flex;align-items:center;gap:4px">🔒 256-BIT ENCRYPTED · INSTITUTIONAL GRADE</span>
+            </div>
+
+            <div class="login-footer">
+                <span>Protected by end-to-end encryption</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ── Lightweight CSS-driven background (no canvas per-frame drawing) ─────
+        // The canvas is now just used for a static dot grid drawn ONCE
+        const canvas = document.getElementById('grid-canvas');
+        const ctx = canvas.getContext('2d');
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            drawStaticGrid();
+        }
+        function drawStaticGrid() {
+            const w = canvas.width, h = canvas.height;
+            ctx.clearRect(0, 0, w, h);
+            // Static subtle dots — drawn once, not every frame
+            const spacing = 50;
+            ctx.fillStyle = 'rgba(200,200,200,.025)';
+            for (let x = 0; x < w; x += spacing) {
+                for (let y = 0; y < h; y += spacing) {
+                    ctx.beginPath();
+                    ctx.arc(x, y, 1, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // Glowing orbs — pure CSS animation via the #grid-canvas background
+        // (the moving glow effect is done via CSS animation on body::before)
+
+        // ── Particles (reduced to 10 for performance) ────────────────────────────
+        const particlesEl = document.getElementById('particles');
+        for (let i = 0; i < 10; i++) {
+            const p = document.createElement('div');
+            p.className = 'particle';
+            p.style.left = Math.random() * 100 + '%';
+            p.style.animationDelay = Math.random() * 15 + 's';
+            p.style.animationDuration = (18 + Math.random() * 15) + 's';
+            p.style.opacity = (0.1 + Math.random() * 0.25);
+            p.style.width = p.style.height = (1 + Math.random() * 2) + 'px';
+            p.style.willChange = 'transform';
+            particlesEl.appendChild(p);
+        }
+
+        // ── Password visibility toggle ─────────────────────────────────────────
+        document.getElementById('pw-toggle').addEventListener('click', () => {
+            const pw = document.getElementById('password');
+            const btn = document.getElementById('pw-toggle');
+            if (pw.type === 'password') {
+                pw.type = 'text';
+                btn.textContent = '🔒';
+                btn.setAttribute('aria-label', 'Hide password');
+            } else {
+                pw.type = 'password';
+                btn.textContent = '👁';
+                btn.setAttribute('aria-label', 'Show password');
+            }
+        });
+
+        // ── Login handler ────────────────────────────────────────────────────────
+        const form = document.getElementById('login-form');
+        const btn = document.getElementById('login-btn');
+        const errEl = document.getElementById('error-msg');
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            errEl.textContent = '';
+            btn.classList.add('loading');
+
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+
+            try {
+                const res = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+
+                const data = await res.json();
+
+                if (res.ok && data.token) {
+                    sessionStorage.setItem('greeks-auth', data.token);
+                    localStorage.setItem('greeks-user', email);
+                    sessionStorage.setItem('greeks-login-time', Date.now().toString());
+
+                    // Smooth transition out
+                    document.body.classList.add('fade-out');
+                    setTimeout(() => {
+                        window.location.href = '/';
+                    }, 600);
+                } else {
+                    btn.classList.remove('loading');
+                    errEl.textContent = data.error || 'Invalid credentials';
+                    // Shake animation
+                    document.querySelector('.login-card').classList.add('shake');
+                    setTimeout(() => document.querySelector('.login-card').classList.remove('shake'), 500);
+                }
+            } catch (err) {
+                btn.classList.remove('loading');
+                errEl.textContent = 'Connection error. Try again.';
+            }
+        });
+
+        // If already logged in (and not expired), redirect
+        const _tok = sessionStorage.getItem('greeks-auth');
+        const _lt = parseInt(sessionStorage.getItem('greeks-login-time') || '0', 10);
+        if (_tok && (Date.now() - _lt < 24 * 60 * 60 * 1000)) {
+            window.location.href = '/';
+        }
+    </script>
+</body>
+
+</html>
