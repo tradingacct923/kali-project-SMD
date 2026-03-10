@@ -1102,6 +1102,60 @@ def api_l2():
             pass
         return jsonify({"connected": False, "error": str(e), "startup_error": diag}), 200
 
+@app.route("/api/l2/diag")
+def api_l2_diag():
+    """Diagnostic: test TopStepX auth + connectivity from this server."""
+    import os, requests as _req, traceback as _tb
+    results = {"tests": {}}
+    username = os.getenv("TOPSTEPX_USERNAME", "")
+    api_key = os.getenv("TOPSTEPX_API_KEY", "")
+    rest_base = os.getenv("TOPSTEPX_REST_BASE", "https://api.topstepx.com")
+    results["env"] = {
+        "username_set": bool(username),
+        "api_key_set": bool(api_key),
+        "api_key_len": len(api_key),
+        "rest_base": rest_base,
+    }
+    # Test 1: Auth
+    try:
+        resp = _req.post(f"{rest_base}/api/Auth/loginKey",
+                         json={"userName": username, "apiKey": api_key}, timeout=10)
+        data = resp.json()
+        results["tests"]["auth"] = {
+            "status": resp.status_code,
+            "success": data.get("success"),
+            "error": data.get("errorMessage", ""),
+            "token_len": len(data.get("token", "")) if data.get("token") else 0,
+        }
+        token = data.get("token", "")
+    except Exception as e:
+        results["tests"]["auth"] = {"error": str(e), "traceback": _tb.format_exc()}
+        token = ""
+    # Test 2: Contract search (if auth worked)
+    if token:
+        try:
+            resp = _req.post(f"{rest_base}/api/Contract/search",
+                             headers={"Authorization": f"Bearer {token}",
+                                      "Content-Type": "application/json"},
+                             json={"searchText": "NQ", "live": False}, timeout=10)
+            cdata = resp.json()
+            contracts = cdata.get("contracts", [])
+            results["tests"]["contract_search"] = {
+                "status": resp.status_code,
+                "count": len(contracts),
+                "first": contracts[0] if contracts else None,
+            }
+        except Exception as e:
+            results["tests"]["contract_search"] = {"error": str(e)}
+    # Test 3: Worker thread error
+    try:
+        import builtins
+        if hasattr(builtins, '_l2_startup_error_holder'):
+            results["tests"]["worker_error"] = builtins._l2_startup_error_holder[0]
+    except Exception:
+        pass
+    return jsonify(results)
+
 @app.route("/api/inference")
 def api_inference():
     """Return signals from all 8 alpha frameworks (synthetic demo data)."""
