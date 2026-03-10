@@ -4503,3 +4503,16 @@ button:active,
 .l2-signal-val { font: 700 1.4rem 'JetBrains Mono', monospace; color: var(--text); }
 .l2-signal-bar { height: 4px; border-radius: 2px; margin-top: 8px; background: rgba(255,255,255,.06); overflow: hidden; }
 .l2-signal-fill { height: 100%; border-radius: 2px; transition: width .5s ease, background .5s ease; }
+
+/* Candlestick chart timeframe/symbol buttons */
+.l2-tf-btn {
+  background: var(--bg3); border: 1px solid var(--border); border-radius: 5px;
+  color: var(--dim); font: 600 .62rem 'JetBrains Mono', monospace;
+  padding: 4px 8px; cursor: pointer; transition: all .15s;
+  letter-spacing: .5px; text-transform: uppercase;
+}
+.l2-tf-btn:hover { border-color: var(--border2); color: var(--text); background: var(--bg4); }
+.l2-tf-btn.active { background: color-mix(in srgb, var(--accent) 15%, transparent);
+  border-color: var(--accent); color: var(--accent); }
+.l2-chart-symbols, .l2-chart-tfs { display: flex; gap: 3px; }
+#l2-candle-chart { border-radius: 0 0 10px 10px; overflow: hidden; }

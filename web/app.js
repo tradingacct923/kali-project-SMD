@@ -4080,7 +4080,13 @@ function loadFlow() {
 // ── Level 2 Dashboard ─────────────────────────────────────────────────────────
 
 let _l2PollTimer = null;
-let _l2PriceChart = null;
+let _l2CandleChart = null;
+let _l2CandleSeries = null;
+let _l2VolumeSeries = null;
+let _l2ChartSymbol = 'NQ';
+let _l2ChartTF = '1m';
+let _l2ChartInitialized = false;
+let _l2CandlePollTimer = null;
 let _l2TapeAll = [];   // accumulated trades, newest first
 
 const L2_SYMBOLS = ['NQ', 'ES', 'YM', 'RTY'];
@@ -4249,47 +4255,112 @@ function _l2RenderSignals(signals) {
     }).join('');
 }
 
-function _l2RenderPriceChart(priceHistory) {
-    const canvas = document.getElementById('chart-l2-price');
-    const hcnt = document.getElementById('l2-history-count');
-    if (!canvas) return;
-    const prices = priceHistory ? (priceHistory['NQ'] || []) : [];
-    if (hcnt) hcnt.textContent = `${prices.length} bars`;
-    const labels = prices.map((_, i) => i);
-    if (_l2PriceChart) {
-        _l2PriceChart.data.labels = labels;
-        _l2PriceChart.data.datasets[0].data = prices;
-        _l2PriceChart.update('none');
-        return;
-    }
-    const ctx = canvas.getContext('2d');
-    _l2PriceChart = new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels,
-            datasets: [{
-                data: prices,
-                borderColor: '#7c5af7',
-                borderWidth: 1.5,
-                pointRadius: 0,
-                tension: 0.2,
-                fill: true,
-                backgroundColor: 'rgba(124,90,247,.08)',
-            }]
+function _l2InitCandleChart() {
+    if (_l2ChartInitialized) return;
+    const container = document.getElementById('l2-candle-chart');
+    if (!container || typeof LightweightCharts === 'undefined') return;
+    _l2ChartInitialized = true;
+
+    _l2CandleChart = LightweightCharts.createChart(container, {
+        width: container.clientWidth,
+        height: 420,
+        layout: {
+            background: { type: 'solid', color: '#0a0c14' },
+            textColor: '#6b7896',
+            fontFamily: "'JetBrains Mono', monospace",
+            fontSize: 11,
         },
-        options: {
-            responsive: true, maintainAspectRatio: false,
-            animation: false,
-            plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false } },
-            scales: {
-                x: { display: false },
-                y: {
-                    grid: { color: 'rgba(255,255,255,.04)' },
-                    ticks: { color: '#6b7896', font: { family: 'JetBrains Mono', size: 10 } }
-                }
-            }
-        }
+        grid: {
+            vertLines: { color: 'rgba(255,255,255,.03)' },
+            horzLines: { color: 'rgba(255,255,255,.03)' },
+        },
+        crosshair: {
+            mode: LightweightCharts.CrosshairMode.Normal,
+            vertLine: { color: 'rgba(124,90,247,.4)', width: 1, style: 2 },
+            horzLine: { color: 'rgba(124,90,247,.4)', width: 1, style: 2 },
+        },
+        rightPriceScale: {
+            borderColor: 'rgba(255,255,255,.06)',
+            scaleMargins: { top: 0.05, bottom: 0.2 },
+        },
+        timeScale: {
+            borderColor: 'rgba(255,255,255,.06)',
+            timeVisible: true,
+            secondsVisible: true,
+            rightOffset: 5,
+        },
     });
+
+    _l2CandleSeries = _l2CandleChart.addCandlestickSeries({
+        upColor: '#1fd17a',
+        downColor: '#e03060',
+        borderUpColor: '#1fd17a',
+        borderDownColor: '#e03060',
+        wickUpColor: '#1fd17a',
+        wickDownColor: '#e03060',
+    });
+
+    _l2VolumeSeries = _l2CandleChart.addHistogramSeries({
+        color: '#7c5af74d',
+        priceFormat: { type: 'volume' },
+        priceScaleId: '',
+        scaleMargins: { top: 0.85, bottom: 0 },
+    });
+
+    // Resize observer
+    const ro = new ResizeObserver(() => {
+        if (_l2CandleChart) _l2CandleChart.applyOptions({ width: container.clientWidth });
+    });
+    ro.observe(container);
+
+    // Button handlers — symbol
+    document.querySelectorAll('#l2-chart-symbols .l2-tf-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('#l2-chart-symbols .l2-tf-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            _l2ChartSymbol = btn.dataset.sym;
+            _l2FetchCandles();
+        });
+    });
+
+    // Button handlers — timeframe
+    document.querySelectorAll('#l2-chart-tfs .l2-tf-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('#l2-chart-tfs .l2-tf-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            _l2ChartTF = btn.dataset.tf;
+            _l2FetchCandles();
+        });
+    });
+
+    // Initial fetch
+    _l2FetchCandles();
+    // Poll candles every 1s for live updates
+    _l2CandlePollTimer = setInterval(_l2FetchCandles, 1000);
+}
+
+function _l2FetchCandles() {
+    if (!_l2CandleSeries) return;
+    authFetch(`/api/l2/candles?symbol=${_l2ChartSymbol}&tf=${_l2ChartTF}`)
+        .then(r => r.json())
+        .then(candles => {
+            if (!Array.isArray(candles) || candles.length === 0) return;
+            const ohlc = candles.map(c => ({
+                time: Math.floor(c.t),
+                open: c.o,
+                high: c.h,
+                low: c.l,
+                close: c.c,
+            }));
+            const vol = candles.map(c => ({
+                time: Math.floor(c.t),
+                value: c.v || 0,
+                color: c.c >= c.o ? 'rgba(31,209,122,.3)' : 'rgba(224,48,96,.3)',
+            }));
+            _l2CandleSeries.setData(ohlc);
+            _l2VolumeSeries.setData(vol);
+        })
+        .catch(() => {});
 }
 
 function _l2Render(data) {
@@ -4313,7 +4384,7 @@ function _l2Render(data) {
     _l2RenderDOM(data.dom);
     _l2RenderTape(data.trades || {});
     _l2RenderSignals(data.signals);
-    _l2RenderPriceChart(data.price_history);
+    _l2InitCandleChart();
 }
 
 function loadL2() {
@@ -4331,6 +4402,7 @@ function _startL2Poll() {
 
 function _stopL2Poll() {
     if (_l2PollTimer) { clearInterval(_l2PollTimer); _l2PollTimer = null; }
+    if (_l2CandlePollTimer) { clearInterval(_l2CandlePollTimer); _l2CandlePollTimer = null; }
 }
 
 // ── Sidebar tab routing ────────────────────────────────────────────────────────

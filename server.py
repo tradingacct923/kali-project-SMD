@@ -1126,6 +1126,25 @@ def api_l2():
             pass
         return jsonify({"connected": False, "error": str(e), "startup_error": diag}), 200
 
+# ── L2 Candle Data API ────────────────────────────────────────────────────────
+@app.route("/api/l2/candles")
+def api_l2_candles():
+    """Returns OHLC candle data for a symbol/timeframe.
+    Query params: symbol (default NQ), tf (default 1m)
+    """
+    import json as _json
+    try:
+        from background_engine.l2_worker import get_candles, CANDLE_TIMEFRAMES
+        symbol = request.args.get("symbol", "NQ").upper()
+        tf = request.args.get("tf", "1m")
+        if tf not in CANDLE_TIMEFRAMES:
+            return jsonify({"error": f"Invalid timeframe. Use: {list(CANDLE_TIMEFRAMES.keys())}"}), 400
+        candles = get_candles(symbol, tf)
+        body = _json.dumps(candles, default=str)
+        return make_response(body, 200, {"Content-Type": "application/json"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route("/api/l2/diag")
 def api_l2_diag():
     """Diagnostic: test TopStepX auth + connectivity from this server."""

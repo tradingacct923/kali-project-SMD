@@ -7,6 +7,7 @@
   <title>Altaris Dashboard</title>
   <link rel="stylesheet" href="style.css?v=BUILD_VERSION" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
   <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
   <script src="app.js?v=BUILD_VERSION" defer></script>
   <!-- Apply saved theme before first paint -->
@@ -884,13 +885,32 @@
         <div class="l2-signals-grid" id="l2-signals-grid"></div>
       </div>
 
-      <!-- Price History Chart -->
+      <!-- Candlestick Chart -->
       <div class="chart-card full" style="margin-top:12px">
-        <div class="card-header">
-          <span class="card-title">📈 NQ Price History</span>
-          <span class="card-sub" id="l2-history-count">0 bars</span>
+        <div class="card-header" style="flex-wrap:wrap;gap:8px">
+          <span class="card-title">📊 Candlestick Chart</span>
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+            <div class="l2-chart-symbols" id="l2-chart-symbols">
+              <button class="l2-tf-btn active" data-sym="NQ">NQ</button>
+              <button class="l2-tf-btn" data-sym="ES">ES</button>
+              <button class="l2-tf-btn" data-sym="YM">YM</button>
+              <button class="l2-tf-btn" data-sym="RTY">RTY</button>
+            </div>
+            <span style="color:var(--dim);margin:0 4px">|</span>
+            <div class="l2-chart-tfs" id="l2-chart-tfs">
+              <button class="l2-tf-btn" data-tf="5s">5s</button>
+              <button class="l2-tf-btn" data-tf="15s">15s</button>
+              <button class="l2-tf-btn" data-tf="30s">30s</button>
+              <button class="l2-tf-btn active" data-tf="1m">1m</button>
+              <button class="l2-tf-btn" data-tf="5m">5m</button>
+              <button class="l2-tf-btn" data-tf="15m">15m</button>
+              <button class="l2-tf-btn" data-tf="30m">30m</button>
+              <button class="l2-tf-btn" data-tf="1h">1h</button>
+              <button class="l2-tf-btn" data-tf="4h">4h</button>
+            </div>
+          </div>
         </div>
-        <div class="chart-wrap" style="height:300px"><canvas id="chart-l2-price"></canvas></div>
+        <div id="l2-candle-chart" style="height:420px;width:100%"></div>
       </div>
 
     </div>

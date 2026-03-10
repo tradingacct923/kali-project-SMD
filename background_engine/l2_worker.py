@@ -35,6 +35,64 @@ API_KEY  = os.getenv("TOPSTEPX_API_KEY",  "")
 # ── Symbols to stream ────────────────────────────────────────────────────────
 SYMBOLS = ["NQ", "ES", "YM", "RTY"]
 
+# ── OHLC Candle Engine ────────────────────────────────────────────────────────
+# Aggregates tick-by-tick trades into OHLC candles for multiple timeframes.
+CANDLE_TIMEFRAMES = {
+    "5s": 5, "15s": 15, "30s": 30,
+    "1m": 60, "5m": 300, "15m": 900, "30m": 1800,
+    "1h": 3600, "4h": 14400,
+}
+CANDLE_MAX = 300  # max candles stored per timeframe per symbol
+
+# {symbol: {tf: deque([{t,o,h,l,c,v}, ...])}}
+_CANDLES: dict[str, dict[str, deque]] = defaultdict(
+    lambda: {tf: deque(maxlen=CANDLE_MAX) for tf in CANDLE_TIMEFRAMES}
+)
+# Current (incomplete) candle being built: {symbol: {tf: {t,o,h,l,c,v}}}
+_CURRENT_CANDLE: dict[str, dict[str, dict]] = defaultdict(dict)
+
+
+def _candle_boundary(timestamp: float, seconds: int) -> float:
+    """Return the start timestamp of the candle that `timestamp` belongs to."""
+    return (int(timestamp) // seconds) * seconds
+
+
+def _feed_candle(symbol: str, price: float, volume: int, timestamp: float):
+    """Feed a trade tick into the candle engine for all timeframes."""
+    for tf, seconds in CANDLE_TIMEFRAMES.items():
+        boundary = _candle_boundary(timestamp, seconds)
+        cur = _CURRENT_CANDLE[symbol].get(tf)
+
+        if cur is None or cur["t"] != boundary:
+            # Close previous candle if it exists
+            if cur is not None:
+                _CANDLES[symbol][tf].append(dict(cur))
+            # Start new candle
+            _CURRENT_CANDLE[symbol][tf] = {
+                "t": boundary,
+                "o": price,
+                "h": price,
+                "l": price,
+                "c": price,
+                "v": volume,
+            }
+        else:
+            # Update existing candle
+            cur["h"] = max(cur["h"], price)
+            cur["l"] = min(cur["l"], price)
+            cur["c"] = price
+            cur["v"] += volume
+
+
+def get_candles(symbol: str, tf: str) -> list:
+    """Return closed candles + current candle for a symbol/timeframe."""
+    with _L2_LOCK:
+        closed = list(_CANDLES.get(symbol, {}).get(tf, []))
+        cur = _CURRENT_CANDLE.get(symbol, {}).get(tf)
+        if cur:
+            closed.append(dict(cur))
+    return closed
+
 # ── Shared signal store (read by server.py /api/l2 endpoint) ─────────────────
 # This dict is updated by the worker thread and read by Flask.
 L2_STATE = {
@@ -45,6 +103,7 @@ L2_STATE = {
     "mid_prices":    {},      # {symbol: float} quick access
     "price_history": {},      # {symbol: [float,...]} rolling 500 ticks
     "trades":        {},      # {symbol: [{price,vol,side,spin,ts},...]}
+    "candles":       {},      # populated on-demand via get_candles()
     "signals": {
         "shannon_entropy":     None,
         "ising_magnetization": None,
@@ -163,6 +222,20 @@ def on_trade(symbol: str, trade: dict):
         _ising.update_trade(symbol, spin)
         with _L2_LOCK:
             L2_STATE["signals"]["ising_magnetization"] = _ising.get_signal()
+
+    # Feed OHLC candle engine
+    price = trade.get("price", 0)
+    vol = trade.get("volume", 1)
+    ts = trade.get("timestamp", time.time())
+    if isinstance(ts, str):
+        try:
+            from datetime import datetime
+            ts = datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp()
+        except Exception:
+            ts = time.time()
+    if price > 0:
+        _feed_candle(symbol, price, vol, ts)
+
     # Store trade in L2_STATE
     with _L2_LOCK:
         if symbol not in L2_STATE["trades"]:
