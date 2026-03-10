@@ -1373,16 +1373,21 @@ def _start_workers():
     _l2_startup_error_holder = [None]   # mutable container for thread error capture
     def _start_l2():
         import time as _t
-        _t.sleep(3)  # Wait for server.py to finish loading — avoids circular import
+        print("[L2-THREAD] sleeping 3s for module load...", flush=True)
+        _t.sleep(3)
+        print("[L2-THREAD] awake, importing l2_worker...", flush=True)
         try:
             from background_engine.l2_worker import start_l2_worker
+            print("[L2-THREAD] import OK, calling start_l2_worker()...", flush=True)
             start_l2_worker()
+            print("[L2-THREAD] start_l2_worker() returned OK", flush=True)
         except Exception as e:
             import traceback
             err_msg = f"{e}\n{traceback.format_exc()}"
             _l2_startup_error_holder[0] = err_msg
-            print(f"[startup] L2 worker failed (non-fatal): {err_msg}")
+            print(f"[L2-THREAD] FAILED: {err_msg}", flush=True)
     _startup_threading.Thread(target=_start_l2, daemon=True).start()
+    print("[startup] L2 daemon thread spawned", flush=True)
 
     # Store reference so /api/l2 can check it
     import builtins
