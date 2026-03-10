@@ -1154,6 +1154,37 @@ def api_l2_diag():
             results["tests"]["worker_error"] = builtins._l2_startup_error_holder[0]
     except Exception:
         pass
+    # Test 4: WebSocket connectivity
+    try:
+        import websocket as _ws_test
+        results["tests"]["websocket_import"] = {"ok": True, "version": getattr(_ws_test, '__version__', 'unknown')}
+        # Quick connect test (3s timeout)
+        if token:
+            hub = os.getenv("TOPSTEPX_MARKET_HUB", "https://rtc.topstepx.com/hubs/market")
+            ws_url = hub.replace("https://", "wss://").replace("http://", "ws://")
+            ws_url = f"{ws_url}?access_token={token}"
+            try:
+                ws = _ws_test.create_connection(ws_url, timeout=5)
+                # Send SignalR handshake
+                ws.send('{"protocol":"json","version":1}\x1e')
+                resp = ws.recv()
+                ws.close()
+                results["tests"]["websocket_connect"] = {"ok": True, "handshake_response": resp[:200]}
+            except Exception as e:
+                results["tests"]["websocket_connect"] = {"ok": False, "error": str(e)}
+    except ImportError as e:
+        results["tests"]["websocket_import"] = {"ok": False, "error": str(e)}
+    # Test 5: Current L2 state
+    try:
+        from background_engine.l2_worker import get_l2_state, L2_STATE
+        results["tests"]["l2_state"] = {
+            "connected": L2_STATE.get("connected"),
+            "last_update": L2_STATE.get("last_update"),
+            "dom_symbols": list(L2_STATE.get("dom", {}).keys()),
+            "quote_symbols": list(L2_STATE.get("quotes", {}).keys()),
+        }
+    except Exception as e:
+        results["tests"]["l2_state"] = {"error": str(e)}
     return jsonify(results)
 
 @app.route("/api/inference")
