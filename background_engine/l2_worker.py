@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 L2 Worker — Background daemon that streams TopStepX Level 2 data
 and feeds computed signals into server.py's inference cache.

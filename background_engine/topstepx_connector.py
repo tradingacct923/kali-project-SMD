@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 TopStepX Level 2 Connector — Real Implementation
 Uses the ProjectX Gateway API (SignalR over WebSocket).
