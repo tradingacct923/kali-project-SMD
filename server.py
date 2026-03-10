@@ -1286,7 +1286,12 @@ def _start_workers():
     _startup_threading.Thread(target=_start_l2, daemon=True).start()
 
 # Start workers when module is loaded (works under gunicorn too)
-_start_workers()
+_worker_error = None
+try:
+    _start_workers()
+except Exception as _e:
+    _worker_error = str(_e)
+    print(f"[startup] WARNING: workers failed to start: {_e}")
 
 if __name__ == "__main__":
     print("Starting Greek Options Dashboard...")
