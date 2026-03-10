@@ -1387,18 +1387,14 @@ def _start_workers():
     builtins._l2_startup_error_holder = _l2_startup_error_holder
 
 # Start workers when module is loaded (works under gunicorn too)
-# Use Timer to defer startup — avoids circular import with l2_worker
+# NOTE: _start_l2() runs in a daemon thread with lazy import, so no circular import.
+# Previous Timer(2.0) approach failed because gunicorn kills master Timer threads on fork.
 _worker_error = None
-
-def _deferred_start():
-    global _worker_error
-    try:
-        _start_workers()
-    except Exception as _e:
-        _worker_error = str(_e)
-        print(f"[startup] WARNING: workers failed to start: {_e}")
-
-_startup_threading.Timer(2.0, _deferred_start).start()
+try:
+    _start_workers()
+except Exception as _e:
+    _worker_error = str(_e)
+    print(f"[startup] WARNING: workers failed to start: {_e}")
 
 if __name__ == "__main__":
     print("Starting Greek Options Dashboard...")
