@@ -190,9 +190,21 @@ class TopStepXConnector:
                 log.warning("TopStepX: could not find contract for %s — skipping", sym)
         return contract_ids
 
-    def retrieve_bars(self, contract_id: str, minutes: int = 500) -> list[dict]:
+    def retrieve_bars(self, contract_id: str, minutes: int = 500,
+                       start_time: str = None, unit: int = 2, unit_number: int = 1,
+                       limit: int = 20000) -> list[dict]:
         """Fetch historical bars using POST /api/History/retrieveBars.
-        Returns list of {t, o, h, l, c, v} dicts sorted oldest-first."""
+        
+        Args:
+            contract_id: ProjectX contract ID
+            minutes: if start_time not given, fetch this many minutes back
+            start_time: ISO timestamp override for custom start (e.g. session open)
+            unit: 1=tick/second, 2=minute, 3=hour
+            unit_number: multiplier (e.g. 5 with unit=2 → 5-min bars)
+            limit: max bars to return (API max is 20,000)
+        
+        Returns: list of {t, o, h, l, c, v} dicts sorted oldest-first.
+        """
         from datetime import datetime, timedelta, timezone
         url = f"{REST_BASE}/api/History/retrieveBars"
         headers = {
@@ -200,14 +212,16 @@ class TopStepXConnector:
             "Content-Type": "application/json",
         }
         now = datetime.now(timezone.utc)
+        if start_time is None:
+            start_time = (now - timedelta(minutes=minutes)).isoformat()
         payload = {
             "contractId": contract_id,
             "live": False,
-            "startTime": (now - timedelta(minutes=minutes)).isoformat(),
+            "startTime": start_time,
             "endTime": now.isoformat(),
-            "unit": 2,          # Minute
-            "unitNumber": 1,    # 1-minute bars
-            "limit": min(minutes, 20000),
+            "unit": unit,
+            "unitNumber": unit_number,
+            "limit": min(limit, 20000),
             "includePartialBar": True,
         }
         try:
@@ -217,7 +231,8 @@ class TopStepXConnector:
             bars = data.get("bars", [])
             # Sort oldest first
             bars.sort(key=lambda b: b.get("t", ""))
-            log.info("TopStepX: retrieved %d bars for %s", len(bars), contract_id)
+            log.info("TopStepX: retrieved %d bars for %s (unit=%d×%d)",
+                     len(bars), contract_id, unit, unit_number)
             return bars
         except Exception as e:
             log.warning("TopStepX: retrieve_bars failed: %s", e)

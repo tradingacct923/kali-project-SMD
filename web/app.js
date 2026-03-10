@@ -4336,7 +4336,7 @@ function _l2InitCandleChart() {
     // Initial fetch
     _l2FetchCandles();
     // Poll candles every 1s for live updates
-    _l2CandlePollTimer = setInterval(_l2FetchCandles, 1000);
+    _l2CandlePollTimer = setInterval(_l2FetchCandles, 250);
 }
 
 function _l2FetchCandles() {

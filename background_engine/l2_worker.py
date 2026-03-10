@@ -42,7 +42,7 @@ CANDLE_TIMEFRAMES = {
     "1m": 60, "5m": 300, "15m": 900, "30m": 1800,
     "1h": 3600, "4h": 14400,
 }
-CANDLE_MAX = 300  # max candles stored per timeframe per symbol
+CANDLE_MAX = 2000  # max candles stored per timeframe per symbol (holds full 24h session)
 
 # {symbol: {tf: deque([{t,o,h,l,c,v}, ...])}}
 _CANDLES: dict[str, dict[str, deque]] = defaultdict(
@@ -352,24 +352,117 @@ def start_l2_worker() -> TopStepXConnector:
         _heavy_thread.start()
         log.info("L2 worker: heavy framework pre-compute loop started (60s interval)")
 
-        # Backfill price history from retrieveBars API
+        # Backfill price history + candle chart from retrieveBars API
         def _backfill():
             try:
+                import time as _time
+                # Wait for contracts to be resolved by the connector
+                for i in range(30):
+                    if _connector._symbol_to_contract:
+                        log.info("L2 backfill: contracts resolved after %ds: %s", i, list(_connector._symbol_to_contract.keys()))
+                        break
+                    _time.sleep(1)
+                else:
+                    log.warning("L2 backfill: no contracts after 30s — aborting")
+                    return
+                _time.sleep(3)  # Extra buffer for connection stability
+                from datetime import datetime, timedelta, timezone
+                try:
+                    from zoneinfo import ZoneInfo
+                    ny_tz = ZoneInfo('America/New_York')
+                except ImportError:
+                    import pytz
+                    ny_tz = pytz.timezone('America/New_York')
+                now_ny = datetime.now(ny_tz)
+                if now_ny.hour < 18:
+                    session_open = now_ny.replace(hour=18, minute=0, second=0, microsecond=0) - timedelta(days=1)
+                else:
+                    session_open = now_ny.replace(hour=18, minute=0, second=0, microsecond=0)
+                session_start_utc = session_open.astimezone(timezone.utc).isoformat()
+                log.info("L2 backfill: session open = %s NY → %s UTC", session_open.strftime('%Y-%m-%d %H:%M'), session_start_utc)
+
                 for sym in SYMBOLS:
                     cid = _connector._symbol_to_contract.get(sym)
                     if not cid:
                         continue
-                    bars = _connector.retrieve_bars(cid, minutes=500)
-                    if bars:
-                        for bar in bars:
-                            close = float(bar.get("c", 0))
-                            if close > 0:
-                                _PRICE_HISTORY[sym].append(close)
+
+                    # Fetch 1-minute bars from session open
+                    bars = _connector.retrieve_bars(
+                        cid, start_time=session_start_utc,
+                        unit=2, unit_number=1, limit=20000
+                    )
+                    if not bars:
+                        log.warning("L2 backfill: no bars for %s", sym)
+                        continue
+                    log.info("L2 backfill: %s got %d bars from API", sym, len(bars))
+
+                    # Seed price history
+                    for bar in bars:
+                        close = float(bar.get("c", 0))
+                        if close > 0:
+                            _PRICE_HISTORY[sym].append(close)
+                    with _L2_LOCK:
+                        L2_STATE["price_history"][sym] = list(_PRICE_HISTORY[sym])
+
+                    # Seed candle engine — insert bars as 1m candles
+                    from datetime import datetime as dt
+                    for bar in bars:
+                        ts_str = bar.get("t", "")
+                        try:
+                            ts = dt.fromisoformat(ts_str.replace("Z", "+00:00")).timestamp()
+                        except Exception:
+                            continue
+                        o = float(bar.get("o", 0))
+                        h = float(bar.get("h", 0))
+                        l = float(bar.get("l", 0))
+                        c = float(bar.get("c", 0))
+                        v = int(bar.get("v", 0))
+                        if o <= 0:
+                            continue
+
+                        # Insert into 1m candle deque directly
                         with _L2_LOCK:
-                            L2_STATE["price_history"][sym] = list(_PRICE_HISTORY[sym])
-                        log.info("L2 backfill: %s seeded with %d bars", sym, len(bars))
+                            _CANDLES[sym]["1m"].append({
+                                "t": _candle_boundary(ts, 60),
+                                "o": o, "h": h, "l": l, "c": c, "v": v
+                            })
+
+                        # Also aggregate into larger timeframes
+                        for tf, secs in CANDLE_TIMEFRAMES.items():
+                            if tf == "1m":
+                                continue  # already done
+                            if secs < 60:
+                                continue  # can't build sub-minute from 1m bars
+                            boundary = _candle_boundary(ts, secs)
+                            cur = _CURRENT_CANDLE[sym].get(tf)
+                            if cur is None or cur["t"] != boundary:
+                                if cur is not None:
+                                    with _L2_LOCK:
+                                        _CANDLES[sym][tf].append(dict(cur))
+                                _CURRENT_CANDLE[sym][tf] = {
+                                    "t": boundary, "o": o, "h": h, "l": l, "c": c, "v": v
+                                }
+                            else:
+                                cur["h"] = max(cur["h"], h)
+                                cur["l"] = min(cur["l"], l)
+                                cur["c"] = c
+                                cur["v"] += v
+
+                    # Flush remaining current candles to deques
+                    for tf in CANDLE_TIMEFRAMES:
+                        cur = _CURRENT_CANDLE[sym].get(tf)
+                        if cur is not None:
+                            with _L2_LOCK:
+                                _CANDLES[sym][tf].append(dict(cur))
+                            _CURRENT_CANDLE[sym][tf] = None
+
+                    candle_count = sum(len(_CANDLES[sym][tf]) for tf in CANDLE_TIMEFRAMES)
+                    log.info("L2 backfill: %s seeded %d bars → %d total candles across all TFs",
+                             sym, len(bars), candle_count)
+
             except Exception as e:
-                log.warning("L2 backfill failed: %s", e)
+                import traceback
+                log.warning("L2 backfill failed: %s\n%s", e, traceback.format_exc())
         threading.Thread(target=_backfill, daemon=True, name="L2Backfill").start()
 
     except Exception as e:
