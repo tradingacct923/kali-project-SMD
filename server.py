@@ -1090,18 +1090,27 @@ def api_l2():
         state = get_l2_state()
         # If L2 is disconnected, attach diagnostic info for debugging
         if not state.get("connected"):
+            import threading as _diag_threading
             diag = {}
+            # Check startup error
             try:
                 import builtins
-                if hasattr(builtins, '_l2_startup_error_holder') and builtins._l2_startup_error_holder[0]:
+                if hasattr(builtins, '_l2_startup_error_holder'):
                     diag["startup_error"] = builtins._l2_startup_error_holder[0]
-            except Exception:
-                pass
+                else:
+                    diag["startup_error"] = "(builtins holder not found - gunicorn fork issue)"
+            except Exception as _de:
+                diag["startup_error"] = f"(check failed: {_de})"
+            # Check thread status
+            l2_threads = [t for t in _diag_threading.enumerate() if 'l2' in t.name.lower() or 'start_l2' in str(t)]
+            diag["all_threads"] = [t.name for t in _diag_threading.enumerate()]
+            diag["l2_threads"] = [t.name for t in l2_threads] if l2_threads else "(no L2 threads found)"
             diag["has_username"] = bool(os.getenv("TOPSTEPX_USERNAME"))
             diag["has_api_key"] = bool(os.getenv("TOPSTEPX_API_KEY"))
             diag["has_password"] = bool(os.getenv("TOPSTEPX_PASSWORD"))
             diag["rest_base"] = os.getenv("TOPSTEPX_REST_BASE", "(not set)")
             diag["worker_error"] = _worker_error
+            diag["workers_started"] = _workers_started
             state["_diag"] = diag
         # Use json.dumps with default=str to handle any numpy types in signals
         body = _json.dumps(state, default=str)
