@@ -1092,7 +1092,15 @@ def api_l2():
         body = _json.dumps(state, default=str)
         return make_response(body, 200, {"Content-Type": "application/json"})
     except Exception as e:
-        return jsonify({"connected": False, "error": str(e)}), 200
+        # Include diagnostic from worker thread if available
+        diag = ""
+        try:
+            import builtins
+            if hasattr(builtins, '_l2_startup_error_holder') and builtins._l2_startup_error_holder[0]:
+                diag = builtins._l2_startup_error_holder[0]
+        except Exception:
+            pass
+        return jsonify({"connected": False, "error": str(e), "startup_error": diag}), 200
 
 @app.route("/api/inference")
 def api_inference():
@@ -1277,13 +1285,21 @@ def _start_workers():
     _startup_threading.Thread(target=_prewarm, daemon=True).start()
 
     # Start TopStepX Level 2 background worker
+    _l2_startup_error_holder = [None]   # mutable container for thread error capture
     def _start_l2():
         try:
             from background_engine.l2_worker import start_l2_worker
             start_l2_worker()
         except Exception as e:
-            print(f"[startup] L2 worker failed (non-fatal): {e}")
+            import traceback
+            err_msg = f"{e}\n{traceback.format_exc()}"
+            _l2_startup_error_holder[0] = err_msg
+            print(f"[startup] L2 worker failed (non-fatal): {err_msg}")
     _startup_threading.Thread(target=_start_l2, daemon=True).start()
+
+    # Store reference so /api/l2 can check it
+    import builtins
+    builtins._l2_startup_error_holder = _l2_startup_error_holder
 
 # Start workers when module is loaded (works under gunicorn too)
 # Use Timer to defer startup — avoids circular import with l2_worker
