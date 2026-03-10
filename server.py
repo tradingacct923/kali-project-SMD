@@ -1253,11 +1253,16 @@ def api_inference():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-if __name__ == "__main__":
-    print("Starting Greek Options Dashboard...")
-    print("Open http://localhost:5000 in your browser")
+# ── Background workers (run under BOTH gunicorn and direct execution) ─────────
+import threading as _startup_threading
 
-    import threading
+_workers_started = False
+
+def _start_workers():
+    global _workers_started
+    if _workers_started:
+        return
+    _workers_started = True
 
     # Pre-warm options cache
     def _prewarm():
@@ -1269,7 +1274,7 @@ if __name__ == "__main__":
             print("[startup] Cache ready -- first load will be fast")
         except Exception as e:
             print(f"[startup] Pre-warm failed (non-fatal): {e}")
-    threading.Thread(target=_prewarm, daemon=True).start()
+    _startup_threading.Thread(target=_prewarm, daemon=True).start()
 
     # Start TopStepX Level 2 background worker
     def _start_l2():
@@ -1278,7 +1283,14 @@ if __name__ == "__main__":
             start_l2_worker()
         except Exception as e:
             print(f"[startup] L2 worker failed (non-fatal): {e}")
-    threading.Thread(target=_start_l2, daemon=True).start()
+    _startup_threading.Thread(target=_start_l2, daemon=True).start()
+
+# Start workers when module is loaded (works under gunicorn too)
+_start_workers()
+
+if __name__ == "__main__":
+    print("Starting Greek Options Dashboard...")
+    print("Open http://localhost:5000 in your browser")
 
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False, threaded=True)
