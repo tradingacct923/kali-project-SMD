@@ -1372,6 +1372,8 @@ def _start_workers():
     # Start TopStepX Level 2 background worker
     _l2_startup_error_holder = [None]   # mutable container for thread error capture
     def _start_l2():
+        import time as _t
+        _t.sleep(3)  # Wait for server.py to finish loading — avoids circular import
         try:
             from background_engine.l2_worker import start_l2_worker
             start_l2_worker()
