@@ -4326,7 +4326,7 @@ function loadL2() {
 function _startL2Poll() {
     loadL2();
     if (_l2PollTimer) clearInterval(_l2PollTimer);
-    _l2PollTimer = setInterval(loadL2, 2000);
+    _l2PollTimer = setInterval(loadL2, 500);
 }
 
 function _stopL2Poll() {
