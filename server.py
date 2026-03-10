@@ -1088,6 +1088,21 @@ def api_l2():
     try:
         from background_engine.l2_worker import get_l2_state
         state = get_l2_state()
+        # If L2 is disconnected, attach diagnostic info for debugging
+        if not state.get("connected"):
+            diag = {}
+            try:
+                import builtins
+                if hasattr(builtins, '_l2_startup_error_holder') and builtins._l2_startup_error_holder[0]:
+                    diag["startup_error"] = builtins._l2_startup_error_holder[0]
+            except Exception:
+                pass
+            diag["has_username"] = bool(os.getenv("TOPSTEPX_USERNAME"))
+            diag["has_api_key"] = bool(os.getenv("TOPSTEPX_API_KEY"))
+            diag["has_password"] = bool(os.getenv("TOPSTEPX_PASSWORD"))
+            diag["rest_base"] = os.getenv("TOPSTEPX_REST_BASE", "(not set)")
+            diag["worker_error"] = _worker_error
+            state["_diag"] = diag
         # Use json.dumps with default=str to handle any numpy types in signals
         body = _json.dumps(state, default=str)
         return make_response(body, 200, {"Content-Type": "application/json"})
@@ -1376,6 +1391,7 @@ def _start_workers():
         print("[L2-THREAD] sleeping 3s for module load...", flush=True)
         _t.sleep(3)
         print("[L2-THREAD] awake, importing l2_worker...", flush=True)
+        print(f"[L2-THREAD] ENV CHECK: username={bool(os.getenv('TOPSTEPX_USERNAME'))}, api_key={bool(os.getenv('TOPSTEPX_API_KEY'))}, password={bool(os.getenv('TOPSTEPX_PASSWORD'))}, rest_base={os.getenv('TOPSTEPX_REST_BASE', '(not set)')}", flush=True)
         try:
             from background_engine.l2_worker import start_l2_worker
             print("[L2-THREAD] import OK, calling start_l2_worker()...", flush=True)
