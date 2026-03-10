@@ -1418,15 +1418,23 @@ def _start_workers():
     import builtins
     builtins._l2_startup_error_holder = _l2_startup_error_holder
 
-# Start workers when module is loaded (works under gunicorn too)
-# NOTE: _start_l2() runs in a daemon thread with lazy import, so no circular import.
-# Previous Timer(2.0) approach failed because gunicorn kills master Timer threads on fork.
+# ── Lazy worker start via before_request (survives gunicorn fork) ──────────────
+# Gunicorn forks AFTER module import, killing any daemon threads started here.
+# Instead, we start workers on the first HTTP request, which is guaranteed to
+# run inside the actual gunicorn worker process.
 _worker_error = None
-try:
-    _start_workers()
-except Exception as _e:
-    _worker_error = str(_e)
-    print(f"[startup] WARNING: workers failed to start: {_e}")
+
+@app.before_request
+def _ensure_workers_started():
+    global _worker_error
+    if not _workers_started:
+        try:
+            print("[startup] Starting workers on first request (gunicorn-safe)...", flush=True)
+            _start_workers()
+            print("[startup] Workers started successfully", flush=True)
+        except Exception as _e:
+            _worker_error = str(_e)
+            print(f"[startup] WARNING: workers failed to start: {_e}", flush=True)
 
 if __name__ == "__main__":
     print("Starting Greek Options Dashboard...")
