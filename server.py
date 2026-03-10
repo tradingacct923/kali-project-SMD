@@ -1286,12 +1286,18 @@ def _start_workers():
     _startup_threading.Thread(target=_start_l2, daemon=True).start()
 
 # Start workers when module is loaded (works under gunicorn too)
+# Use Timer to defer startup — avoids circular import with l2_worker
 _worker_error = None
-try:
-    _start_workers()
-except Exception as _e:
-    _worker_error = str(_e)
-    print(f"[startup] WARNING: workers failed to start: {_e}")
+
+def _deferred_start():
+    global _worker_error
+    try:
+        _start_workers()
+    except Exception as _e:
+        _worker_error = str(_e)
+        print(f"[startup] WARNING: workers failed to start: {_e}")
+
+_startup_threading.Timer(2.0, _deferred_start).start()
 
 if __name__ == "__main__":
     print("Starting Greek Options Dashboard...")
