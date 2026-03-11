@@ -829,64 +829,8 @@
     <!-- ── Level 2 Tab ──────────────────────────────────────────────── -->
     <div id="tab-l2" class="tab-content">
 
-      <!-- L2 Header Strip -->
-      <div class="l2-header-strip">
-        <div class="l2-status">
-          <span class="l2-dot" id="l2-status-dot"></span>
-          <span id="l2-status-text">DISCONNECTED</span>
-        </div>
-        <div class="l2-symbol-prices" id="l2-symbol-prices"></div>
-      </div>
-
-      <!-- Imbalance Gauges -->
-      <div class="l2-imbalance-row" id="l2-imbalance-row"></div>
-
-      <!-- DOM + Tape Row -->
-      <div class="l2-main-row">
-
-        <!-- DOM Ladder -->
-        <div class="chart-card l2-dom-card">
-          <div class="card-header">
-            <span class="card-title">📊 DOM Ladder — NQ</span>
-            <span class="card-sub" id="l2-dom-stats">bids: — asks: —</span>
-          </div>
-          <div class="l2-dom-ladder" id="l2-dom-ladder">
-            <div class="l2-dom-head">
-              <span class="l2-dom-col">Vol</span>
-              <span class="l2-dom-col l2-dom-price-col">Price</span>
-              <span class="l2-dom-col">Vol</span>
-            </div>
-            <div class="l2-dom-body" id="l2-dom-body"></div>
-          </div>
-        </div>
-
-        <!-- Trade Tape -->
-        <div class="chart-card l2-tape-card">
-          <div class="card-header">
-            <span class="card-title">🔴🟢 Trade Tape</span>
-            <span class="card-sub" id="l2-tape-count">0 prints</span>
-          </div>
-          <div class="l2-tape" id="l2-tape">
-            <div class="l2-tape-head">
-              <span>Time</span><span>Price</span><span>Size</span><span>Side</span>
-            </div>
-            <div class="l2-tape-body" id="l2-tape-body"></div>
-          </div>
-        </div>
-
-      </div>
-
-      <!-- Signal Cards Grid -->
-      <div class="chart-card full" style="margin-top:12px">
-        <div class="card-header">
-          <span class="card-title">🧠 Framework Signals</span>
-          <span class="card-sub">Live computation from DOM + Trade data</span>
-        </div>
-        <div class="l2-signals-grid" id="l2-signals-grid"></div>
-      </div>
-
-      <!-- Candlestick Chart -->
-      <div class="chart-card full" style="margin-top:12px">
+      <!-- Candlestick Chart — Full Screen -->
+      <div class="chart-card full" style="margin-top:0;border:none;background:transparent">
         <div class="card-header" style="flex-wrap:wrap;gap:8px">
           <span class="card-title">📊 Candlestick Chart</span>
           <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
@@ -910,7 +854,7 @@
             </div>
           </div>
         </div>
-        <div id="l2-candle-chart" style="height:420px;width:100%"></div>
+        <div id="l2-candle-chart" style="height:calc(100vh - 120px);width:100%"></div>
       </div>
 
     </div>
