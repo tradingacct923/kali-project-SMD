@@ -89,58 +89,10 @@ function doLogout() {
     setTimeout(() => { if (window._dismissWelcome) window._dismissWelcome(); }, 30000);
 })();
 
-// ── Sidebar navigation + user footer ─────────────────────────────────────────
-(function setupSidebar() {
-    // Tab switching
-    const items = document.querySelectorAll('.sb-item[data-tab]');
-    items.forEach(item => {
-        item.addEventListener('click', () => {
-            items.forEach(i => i.classList.remove('active'));
-            item.classList.add('active');
-            // Trigger same tab switching logic
-            const tabId = item.dataset.tab;
-            document.querySelectorAll('.tab-content').forEach(tc => {
-                tc.classList.remove('active');
-            });
-            const target = document.getElementById('tab-' + tabId);
-            if (target) target.classList.add('active');
-            // Also update old tab buttons if any code references them
-            document.querySelectorAll('.tab[data-tab]').forEach(t => {
-                t.classList.toggle('active', t.dataset.tab === tabId);
-            });
-            // Lazy-load data for tabs that fetch on demand
-            if (tabId === 'anomaly' && typeof updateAnomaly === 'function' && !charts?.['chart-anomaly']) updateAnomaly();
-            if (tabId === 'anomaly' && typeof loadHIRO === 'function') loadHIRO();
-            if (tabId === 'anomaly' && typeof loadTopology === 'function' && !topoLoaded) { topoLoaded = true; loadTopology(); }
-            if (tabId === 'anomaly' && typeof loadEntropy === 'function' && !entropyLoaded) { entropyLoaded = true; loadEntropy(); }
-            if (tabId === 'vol' && typeof updateVolatility === 'function') updateVolatility();
-            if (tabId === 'macro' && typeof updateMacro === 'function') updateMacro();
-            if (tabId === 'regime' && typeof updateRegime === 'function' && !charts?.['chart-regime-price']) updateRegime();
-            if (tabId === 'settings' && typeof loadSettings === 'function') loadSettings();
-            if (tabId === 'regime' && typeof updateRegime === 'function' && !charts?.['chart-regime-price']) updateRegime();
-            if (tabId === 'oi' && typeof loadOI365 === 'function') loadOI365();
-            if (tabId === 'prob' && typeof renderProb === 'function') renderProb();
-            if (tabId === 'inference' && typeof loadInference === 'function') loadInference();
-            if (tabId === 'crashrisk' && typeof loadCrashRisk === 'function') loadCrashRisk();
-            if (tabId === 'flow' && typeof loadFlow === 'function') loadFlow();
-        });
-    });
+// ── Sidebar navigation REMOVED — terminal mode only ─────────────────────────
+// setupSidebar() deleted: no sidebar DOM exists.
+// User info is now handled by the terminal toolbar.
 
-    // User info in sidebar footer
-    const email = localStorage.getItem('greeks-user') || '';
-    if (email) {
-        const name = email.split('@')[0].replace(/[._]/g, ' ')
-            .replace(/\b\w/g, c => c.toUpperCase());
-        const initials = name.split(' ').map(w => w[0]).join('').slice(0, 2);
-        const nameEl = document.getElementById('sb-user-name');
-        const avatarEl = document.getElementById('sb-avatar');
-        if (nameEl) nameEl.textContent = name;
-        if (avatarEl) avatarEl.textContent = initials;
-    }
-
-    // Sign out removed — no auth
-
-})();
 
 // â”€â”€ Config â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const API_URL = "/api/data";
@@ -1543,27 +1495,8 @@ async function update() {
 }
 
 // â”€â”€ Tabs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-document.querySelectorAll(".tab").forEach(btn => {
-    btn.addEventListener("click", () => {
-        document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
-        document.querySelectorAll(".tab-content").forEach(t => t.classList.remove("active"));
-        btn.classList.add("active");
-        document.getElementById("tab-" + btn.dataset.tab).classList.add("active");
-        // Trigger anomaly/HIRO/regime load lazily
-        if (btn.dataset.tab === "anomaly" && !charts["chart-anomaly"]) updateAnomaly();
-        if (btn.dataset.tab === "anomaly") { loadHIRO(); }
-        if (btn.dataset.tab === "anomaly" && !topoLoaded) { topoLoaded = true; loadTopology(); }
-        if (btn.dataset.tab === "anomaly" && !entropyLoaded) { entropyLoaded = true; loadEntropy(); }
-        if (btn.dataset.tab === "vol") updateVolatility();
-        if (btn.dataset.tab === "macro") updateMacro();
-        if (btn.dataset.tab === "chart") { charts["_onChartTab"] = true; updateCandleChart(); }
-        if (btn.dataset.tab !== "chart") { charts["_onChartTab"] = false; }
-        if (btn.dataset.tab === "regime" && !charts["chart-regime-price"]) updateRegime();
-        if (btn.dataset.tab === "settings") loadSettings();
-        if (btn.dataset.tab === "oi") loadOI365();
-        if (btn.dataset.tab === "prob") renderProb();
-    });
-});
+// Old tab routing REMOVED — terminal mode only
+// No .tab or .tab-content elements exist in the DOM.
 
 // â”€â”€ Anomaly Chart â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function updateAnomaly() {
@@ -2515,9 +2448,9 @@ function setAutoTab(val, _btn) {
     setAnim(anim);
     setNumFmt(numFmt);
     setLineW(lineW);
-    // Auto-open tab
-    const autoBtn = document.querySelector(`[data-tab="${autoTab}"]`);
-    if (autoBtn && !document.querySelector(".tab.active")) autoBtn.click();
+    // Auto-open tab — DISABLED in terminal mode (no sidebar tabs)
+    // const autoBtn = document.querySelector(`[data-tab="${autoTab}"]`);
+    // if (autoBtn && !document.querySelector(".tab.active")) autoBtn.click();
     _setPillGroup("[data-autotab-opt]", autoTab);
 })();
 
@@ -3945,16 +3878,8 @@ function cycleTheme() {
     if (btn) btn.textContent = THEME_LABELS[saved] || THEME_LABELS.midnight;
 })();
 
-// ── Header Settings button → switch to settings tab ─────────────────────────
-document.getElementById('header-settings-btn')?.addEventListener('click', function () {
-    // Deactivate all sidebar items
-    document.querySelectorAll('.sb-item').forEach(i => i.classList.remove('active'));
-    // Hide all tab content
-    document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
-    // Show settings
-    const target = document.getElementById('tab-settings');
-    if (target) target.classList.add('active');
-});
+// ── Header Settings button — DISABLED in terminal mode (no old tabs) ────────
+// document.getElementById('header-settings-btn') handler removed.
 
 // Force Plotly charts to fill container width on window resize
 window.addEventListener('resize', () => {
@@ -4720,15 +4645,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ── Metric bridge: update toolbar from old dash metrics ──
     setInterval(_termUpdateMetrics, 2000);
-
-    // ── Old sidebar tab routing (preserved for backwards compat) ──
-    document.querySelectorAll('.sb-item[data-tab]').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const tab = btn.getAttribute('data-tab');
-            if (tab === 'l2') _startL2Poll();
-            else _stopL2Poll();
-        });
-    });
 
     console.log('[Terminal] Super Chart mode initialized');
 });
