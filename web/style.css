@@ -4384,40 +4384,14 @@ h3 {
 .oc-itm { background: rgba(255,255,255,.015); }
 
 
-/* ══════════════════════════════════════════════════════════════════════════════
-   OLD LAYOUT — Sidebar (hidden but preserved)
-   ══════════════════════════════════════════════════════════════════════════════ */
-.app-layout {
-  display: flex;
-  min-height: 100vh;
-  width: 100%;
-}
+/* Old sidebar + main-content CSS DELETED — terminal layout only */
 
 
-.sidebar {
-  width: 200px;
-  min-width: 200px;
-  background: var(--bg2, rgba(8, 10, 18, .95));
-  border-right: 1px solid var(--border, rgba(56, 189, 248, .06));
-  display: flex;
-  flex-direction: column;
-  padding: 16px 0;
-  position: fixed;
-  top: 0;
-  left: 0;
-  bottom: 0;
-  z-index: 100;
-  overflow-y: auto;
-}
 
-.sb-logo {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 20px 20px;
-  border-bottom: 1px solid var(--border, rgba(56, 189, 248, .06));
-  margin-bottom: 16px;
-}
+
+
+
+
 
 .sb-logo-icon {
   font-size: 1.3rem;
@@ -4656,13 +4630,6 @@ h3 {
   animation: shimmer 1.8s ease-in-out infinite;
 }
 
-/* ── Sidebar micro-interactions ────────────────────────────────────────── */
-.sb-item {
-  transition: background .2s, color .2s, transform .15s, box-shadow .2s !important;
-}
-
-.sb-item:hover {
-  transform: translateX(3px);
 }
 
 .sb-item:active {
