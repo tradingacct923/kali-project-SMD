@@ -51,6 +51,10 @@ _CANDLES: dict[str, dict[str, deque]] = defaultdict(
 # Current (incomplete) candle being built: {symbol: {tf: {t,o,h,l,c,v}}}
 _CURRENT_CANDLE: dict[str, dict[str, dict]] = defaultdict(dict)
 
+# Dedicated lock for candle data — separate from _L2_LOCK to avoid
+# contention with DOM/trade state reads during high-volume periods.
+_CANDLE_LOCK = threading.Lock()
+
 
 def _candle_boundary(timestamp: float, seconds: int) -> float:
     """Return the start timestamp of the candle that `timestamp` belongs to."""
@@ -58,35 +62,38 @@ def _candle_boundary(timestamp: float, seconds: int) -> float:
 
 
 def _feed_candle(symbol: str, price: float, volume: int, timestamp: float):
-    """Feed a trade tick into the candle engine for all timeframes."""
-    for tf, seconds in CANDLE_TIMEFRAMES.items():
-        boundary = _candle_boundary(timestamp, seconds)
-        cur = _CURRENT_CANDLE[symbol].get(tf)
+    """Feed a trade tick into the candle engine for all timeframes.
+    Thread-safe: acquires _CANDLE_LOCK to prevent data races with get_candles()."""
+    with _CANDLE_LOCK:
+        for tf, seconds in CANDLE_TIMEFRAMES.items():
+            boundary = _candle_boundary(timestamp, seconds)
+            cur = _CURRENT_CANDLE[symbol].get(tf)
 
-        if cur is None or cur["t"] != boundary:
-            # Close previous candle if it exists
-            if cur is not None:
-                _CANDLES[symbol][tf].append(dict(cur))
-            # Start new candle
-            _CURRENT_CANDLE[symbol][tf] = {
-                "t": boundary,
-                "o": price,
-                "h": price,
-                "l": price,
-                "c": price,
-                "v": volume,
-            }
-        else:
-            # Update existing candle
-            cur["h"] = max(cur["h"], price)
-            cur["l"] = min(cur["l"], price)
-            cur["c"] = price
-            cur["v"] += volume
+            if cur is None or cur["t"] != boundary:
+                # Close previous candle if it exists
+                if cur is not None:
+                    _CANDLES[symbol][tf].append(dict(cur))
+                # Start new candle
+                _CURRENT_CANDLE[symbol][tf] = {
+                    "t": boundary,
+                    "o": price,
+                    "h": price,
+                    "l": price,
+                    "c": price,
+                    "v": volume,
+                }
+            else:
+                # Update existing candle
+                cur["h"] = max(cur["h"], price)
+                cur["l"] = min(cur["l"], price)
+                cur["c"] = price
+                cur["v"] += volume
 
 
 def get_candles(symbol: str, tf: str) -> list:
-    """Return closed candles + current candle for a symbol/timeframe."""
-    with _L2_LOCK:
+    """Return closed candles + current candle for a symbol/timeframe.
+    Thread-safe: uses _CANDLE_LOCK (same lock as _feed_candle)."""
+    with _CANDLE_LOCK:
         closed = list(_CANDLES.get(symbol, {}).get(tf, []))
         cur = _CURRENT_CANDLE.get(symbol, {}).get(tf)
         if cur:
@@ -421,40 +428,41 @@ def start_l2_worker() -> TopStepXConnector:
                             continue
 
                         # Insert into 1m candle deque directly
-                        with _L2_LOCK:
+                        with _CANDLE_LOCK:
                             _CANDLES[sym]["1m"].append({
                                 "t": _candle_boundary(ts, 60),
                                 "o": o, "h": h, "l": l, "c": c, "v": v
                             })
 
                         # Also aggregate into larger timeframes
-                        for tf, secs in CANDLE_TIMEFRAMES.items():
-                            if tf == "1m":
-                                continue  # already done
-                            if secs < 60:
-                                continue  # can't build sub-minute from 1m bars
-                            boundary = _candle_boundary(ts, secs)
-                            cur = _CURRENT_CANDLE[sym].get(tf)
-                            if cur is None or cur["t"] != boundary:
-                                if cur is not None:
-                                    with _L2_LOCK:
+                        # Uses _CANDLE_LOCK to protect _CURRENT_CANDLE + _CANDLES
+                        with _CANDLE_LOCK:
+                            for tf, secs in CANDLE_TIMEFRAMES.items():
+                                if tf == "1m":
+                                    continue  # already done
+                                if secs < 60:
+                                    continue  # can't build sub-minute from 1m bars
+                                boundary = _candle_boundary(ts, secs)
+                                cur = _CURRENT_CANDLE[sym].get(tf)
+                                if cur is None or cur["t"] != boundary:
+                                    if cur is not None:
                                         _CANDLES[sym][tf].append(dict(cur))
-                                _CURRENT_CANDLE[sym][tf] = {
-                                    "t": boundary, "o": o, "h": h, "l": l, "c": c, "v": v
-                                }
-                            else:
-                                cur["h"] = max(cur["h"], h)
-                                cur["l"] = min(cur["l"], l)
-                                cur["c"] = c
-                                cur["v"] += v
+                                    _CURRENT_CANDLE[sym][tf] = {
+                                        "t": boundary, "o": o, "h": h, "l": l, "c": c, "v": v
+                                    }
+                                else:
+                                    cur["h"] = max(cur["h"], h)
+                                    cur["l"] = min(cur["l"], l)
+                                    cur["c"] = c
+                                    cur["v"] += v
 
                     # Flush remaining current candles to deques
-                    for tf in CANDLE_TIMEFRAMES:
-                        cur = _CURRENT_CANDLE[sym].get(tf)
-                        if cur is not None:
-                            with _L2_LOCK:
+                    with _CANDLE_LOCK:
+                        for tf in CANDLE_TIMEFRAMES:
+                            cur = _CURRENT_CANDLE[sym].get(tf)
+                            if cur is not None:
                                 _CANDLES[sym][tf].append(dict(cur))
-                            _CURRENT_CANDLE[sym][tf] = None
+                                _CURRENT_CANDLE[sym][tf] = None
 
                     candle_count = sum(len(_CANDLES[sym][tf]) for tf in CANDLE_TIMEFRAMES)
                     log.info("L2 backfill: %s seeded %d bars → %d total candles across all TFs",

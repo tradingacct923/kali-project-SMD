@@ -4348,7 +4348,8 @@ function _l2InitCandleChart() {
             document.querySelectorAll('#l2-chart-symbols .l2-tf-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             _l2ChartSymbol = btn.dataset.sym;
-            _l2PrevCandleCount = 0;
+            // Full reload: reset delta tracking, fetch all history
+            _l2LastCandleTime = 0;
             _l2FetchCandles(true);
         });
     });
@@ -4359,55 +4360,96 @@ function _l2InitCandleChart() {
             document.querySelectorAll('#l2-chart-tfs .l2-tf-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             _l2ChartTF = btn.dataset.tf;
-            _l2PrevCandleCount = 0;
+            // Full reload: reset delta tracking, fetch all history
+            _l2LastCandleTime = 0;
             _l2FetchCandles(true);
         });
     });
 
-    // Initial fetch
+    // Initial fetch — full history with setData()
     _l2FetchCandles(true);
-    // Live poll every 2s (balance between freshness and performance)
-    _l2CandlePollTimer = setInterval(() => _l2FetchCandles(false), 2000);
+    // Start chained polling (NOT setInterval — prevents request stacking)
+    _l2ScheduleNextPoll();
 }
 
-let _l2PrevCandleCount = 0;
+// ── Delta tracking ──
+// Tracks the timestamp of the newest candle we've received.
+// Live polls send ?since=_l2LastCandleTime so the server returns only 1-3 candles.
+let _l2LastCandleTime = 0;
+
+// ── Chained setTimeout polling ──
+// Unlike setInterval, this guarantees the next poll starts only AFTER the
+// previous fetch completes. Prevents request stacking during server lag.
+const _L2_POLL_INTERVAL = 1500; // 1.5s between polls
+
+function _l2ScheduleNextPoll() {
+    // Only schedule if we're still on the L2 tab and have a chart
+    if (!_l2CandleSeries) return;
+    _l2CandlePollTimer = setTimeout(() => {
+        _l2FetchCandles(false).finally(() => {
+            // Chain: schedule next poll after this one resolves (success or error)
+            _l2ScheduleNextPoll();
+        });
+    }, _L2_POLL_INTERVAL);
+}
 
 function _l2FetchCandles(fullRedraw) {
-    if (!_l2CandleSeries) return;
-    authFetch(`/api/l2/candles?symbol=${_l2ChartSymbol}&tf=${_l2ChartTF}`)
+    if (!_l2CandleSeries) return Promise.resolve();
+
+    // Build URL: omit ?since= on full redraws to get all history
+    let url = `/api/l2/candles?symbol=${_l2ChartSymbol}&tf=${_l2ChartTF}`;
+    if (!fullRedraw && _l2LastCandleTime > 0) {
+        url += `&since=${_l2LastCandleTime}`;
+    }
+
+    return authFetch(url)
         .then(r => r.json())
         .then(resp => {
             const candles = resp.candles;
             if (!Array.isArray(candles) || candles.length === 0) return;
 
-            const ohlc = candles.map(c => ({
-                time: c.time,
-                open: c.open,
-                high: c.high,
-                low: c.low,
-                close: c.close,
-            }));
-            const vol = candles.map(c => ({
-                time: c.time,
-                value: c.volume || 0,
-                color: c.close >= c.open ? 'rgba(31,209,122,.25)' : 'rgba(224,48,96,.25)',
-            }));
-
-            if (fullRedraw || candles.length !== _l2PrevCandleCount) {
-                // Full setData for initial load or when bar count changes (new bar formed)
+            if (fullRedraw) {
+                // ── FULL HISTORY: setData() once ──
+                // Used on initial load and symbol/timeframe switches only.
+                const ohlc = candles.map(c => ({
+                    time: c.time,
+                    open: c.open,
+                    high: c.high,
+                    low: c.low,
+                    close: c.close,
+                }));
+                const vol = candles.map(c => ({
+                    time: c.time,
+                    value: c.volume || 0,
+                    color: c.close >= c.open ? 'rgba(31,209,122,.25)' : 'rgba(224,48,96,.25)',
+                }));
                 _l2CandleSeries.setData(ohlc);
                 _l2VolumeSeries.setData(vol);
-                _l2PrevCandleCount = candles.length;
-                if (fullRedraw) {
-                    _l2CandleChart.timeScale().fitContent();
-                }
+                _l2CandleChart.timeScale().fitContent();
             } else {
-                // Just update the last candle (live tick — no redraw flicker)
-                const lastOhlc = ohlc[ohlc.length - 1];
-                const lastVol = vol[vol.length - 1];
-                _l2CandleSeries.update(lastOhlc);
-                _l2VolumeSeries.update(lastVol);
+                // ── DELTA UPDATE: update() only ──
+                // Server returns only candles with time >= _l2LastCandleTime
+                // (typically 1-2 candles). update() handles both:
+                //   - Modifying the current bar (same timestamp)
+                //   - Appending a new bar (new timestamp)
+                for (const c of candles) {
+                    _l2CandleSeries.update({
+                        time: c.time,
+                        open: c.open,
+                        high: c.high,
+                        low: c.low,
+                        close: c.close,
+                    });
+                    _l2VolumeSeries.update({
+                        time: c.time,
+                        value: c.volume || 0,
+                        color: c.close >= c.open ? 'rgba(31,209,122,.25)' : 'rgba(224,48,96,.25)',
+                    });
+                }
             }
+
+            // Track the newest candle timestamp for next delta poll
+            _l2LastCandleTime = candles[candles.length - 1].time;
         })
         .catch(() => {});
 }
@@ -4436,24 +4478,35 @@ function _l2Render(data) {
     _l2InitCandleChart();
 }
 
+// ── L2 DOM/Trade polling (also chained setTimeout, not setInterval) ──
+
 function loadL2() {
-    authFetch('/api/l2')
+    return authFetch('/api/l2')
         .then(r => r.json())
         .then(data => { if (data) _l2Render(data); })
         .catch(e => console.warn('L2 poll error:', e));
 }
 
+function _l2ScheduleDomPoll() {
+    _l2PollTimer = setTimeout(() => {
+        loadL2().finally(() => {
+            _l2ScheduleDomPoll();
+        });
+    }, 500);
+}
+
 function _startL2Poll() {
+    // Initial DOM fetch
     loadL2();
-    if (_l2PollTimer) clearInterval(_l2PollTimer);
-    _l2PollTimer = setInterval(loadL2, 500);
-    // Also kickstart candle chart if not yet initialized
+    // Start chained DOM polling (replaces setInterval)
+    _l2ScheduleDomPoll();
+    // Kickstart candle chart if not yet initialized
     _l2InitCandleChart();
 }
 
 function _stopL2Poll() {
-    if (_l2PollTimer) { clearInterval(_l2PollTimer); _l2PollTimer = null; }
-    if (_l2CandlePollTimer) { clearInterval(_l2CandlePollTimer); _l2CandlePollTimer = null; }
+    if (_l2PollTimer) { clearTimeout(_l2PollTimer); _l2PollTimer = null; }
+    if (_l2CandlePollTimer) { clearTimeout(_l2CandlePollTimer); _l2CandlePollTimer = null; }
 }
 
 // ── Sidebar tab routing ────────────────────────────────────────────────────────

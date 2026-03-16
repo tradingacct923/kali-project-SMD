@@ -1391,41 +1391,68 @@ def api_inference():
 
 # ── Level 2 Candle Chart API ─────────────────────────────────────────────────
 
+# Response cache: avoids re-serializing identical data when multiple tabs poll.
+# Key = (symbol, tf, since), value = (timestamp, json_response).
+import time as _time
+_candle_cache: dict[tuple, tuple] = {}
+_CANDLE_CACHE_TTL = 0.5  # 500ms
+
 @app.route("/api/l2/candles")
 def api_l2_candles():
     """OHLCV candles from L2 tick data.
     Query params:
-      ?symbol=NQ  (default NQ)
-      ?tf=1m      (default 1m — one of: 5s,15s,30s,1m,5m,15m,30m,1h,4h)
-    Returns JSON array of {time, open, high, low, close, volume} for LWC.
+      ?symbol=NQ   (default NQ)
+      ?tf=1m       (default 1m — one of: 5s,15s,30s,1m,5m,15m,30m,1h,4h)
+      ?since=0     (optional Unix timestamp — only return candles at or after this time)
+                   Omit or set to 0 for full history (initial load / timeframe switch).
+    Returns JSON: {symbol, tf, candles: [{time, open, high, low, close, volume}, ...]}
     """
     try:
         from background_engine.l2_worker import get_candles, CANDLE_TIMEFRAMES
         symbol = request.args.get("symbol", "NQ").upper()
         tf     = request.args.get("tf", "1m")
+        since  = int(request.args.get("since", 0))  # Unix timestamp filter
         if tf not in CANDLE_TIMEFRAMES:
             return jsonify({"error": f"Invalid tf '{tf}'. Use: {list(CANDLE_TIMEFRAMES.keys())}"}), 400
 
+        # ── Check response cache ──
+        cache_key = (symbol, tf, since)
+        cached = _candle_cache.get(cache_key)
+        if cached and (_time.time() - cached[0]) < _CANDLE_CACHE_TTL:
+            return cached[1]
+
         raw = get_candles(symbol, tf)
+
         # Convert to TradingView Lightweight Charts format (time as Unix seconds)
         candles = []
         for c in raw:
-            t = c.get("t", 0)
+            t = int(c.get("t", 0))
+            # Delta filter: skip candles before 'since' timestamp
+            if since and t < since:
+                continue
             candles.append({
-                "time":   int(t),
+                "time":   t,
                 "open":   c["o"],
                 "high":   c["h"],
                 "low":    c["l"],
                 "close":  c["c"],
                 "volume": c.get("v", 0),
             })
+
         # Deduplicate by time (keep last occurrence)
         seen = {}
         for c in candles:
             seen[c["time"]] = c
         candles = sorted(seen.values(), key=lambda x: x["time"])
 
-        return jsonify({"symbol": symbol, "tf": tf, "candles": candles})
+        resp = jsonify({"symbol": symbol, "tf": tf, "candles": candles})
+        # Cache the response
+        _candle_cache[cache_key] = (_time.time(), resp)
+        # Evict stale entries (keep cache small)
+        stale = [k for k, v in _candle_cache.items() if (_time.time() - v[0]) > 5.0]
+        for k in stale:
+            _candle_cache.pop(k, None)
+        return resp
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -1434,15 +1461,16 @@ def api_l2_candles():
 def api_l2_status():
     """L2 connection health and candle availability."""
     try:
-        from background_engine.l2_worker import get_l2_state, _CANDLES, CANDLE_TIMEFRAMES
+        from background_engine.l2_worker import get_l2_state, _CANDLES, CANDLE_TIMEFRAMES, _CANDLE_LOCK
         state = get_l2_state()
-        # Candle counts per symbol/tf
+        # Candle counts per symbol/tf (uses _CANDLE_LOCK for thread safety)
         counts = {}
-        for sym in ["NQ", "ES", "YM", "RTY"]:
-            counts[sym] = {}
-            for tf in CANDLE_TIMEFRAMES:
-                q = _CANDLES.get(sym, {}).get(tf)
-                counts[sym][tf] = len(q) if q else 0
+        with _CANDLE_LOCK:
+            for sym in ["NQ", "ES", "YM", "RTY"]:
+                counts[sym] = {}
+                for tf in CANDLE_TIMEFRAMES:
+                    q = _CANDLES.get(sym, {}).get(tf)
+                    counts[sym][tf] = len(q) if q else 0
         return jsonify({
             "connected":   state.get("connected", False),
             "mid_prices":  state.get("mid_prices", {}),
