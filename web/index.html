@@ -37,7 +37,106 @@
     </div>
   </div>
 
+  <!-- ══════════════════════════════════════════════════════════════════════
+       TERMINAL LAYOUT — Single-screen "Super Chart" interface
+       Replaces the old sidebar-driven multi-page dashboard.
+       Old sidebar + tabs are preserved but hidden via CSS.
+       ══════════════════════════════════════════════════════════════════════ -->
+  <div class="terminal" id="terminal">
+
+    <!-- ── Row 1: Compact Toolbar ── -->
+    <div class="t-toolbar" id="t-toolbar">
+      <div class="t-tb-left">
+        <span class="t-logo">⚡ Altaris</span>
+        <span class="t-divider"></span>
+        <!-- L2 Symbol buttons -->
+        <div class="t-btn-group" id="t-symbols">
+          <button class="t-btn active" data-sym="NQ">NQ</button>
+          <button class="t-btn" data-sym="ES">ES</button>
+          <button class="t-btn" data-sym="YM">YM</button>
+          <button class="t-btn" data-sym="RTY">RTY</button>
+        </div>
+        <span class="t-divider"></span>
+        <!-- Timeframes -->
+        <div class="t-btn-group" id="t-timeframes">
+          <button class="t-btn" data-tf="5s">5s</button>
+          <button class="t-btn" data-tf="15s">15s</button>
+          <button class="t-btn" data-tf="30s">30s</button>
+          <button class="t-btn active" data-tf="1m">1m</button>
+          <button class="t-btn" data-tf="5m">5m</button>
+          <button class="t-btn" data-tf="15m">15m</button>
+          <button class="t-btn" data-tf="30m">30m</button>
+          <button class="t-btn" data-tf="1h">1h</button>
+          <button class="t-btn" data-tf="4h">4h</button>
+        </div>
+      </div>
+      <div class="t-tb-center">
+        <div class="t-metric"><span class="t-metric-label">Spot</span><span class="t-metric-val" id="t-spot">—</span></div>
+        <div class="t-metric"><span class="t-metric-label cw">Call Wall</span><span class="t-metric-val" id="t-cw">—</span></div>
+        <div class="t-metric"><span class="t-metric-label pw">Put Wall</span><span class="t-metric-val" id="t-pw">—</span></div>
+        <div class="t-metric"><span class="t-metric-label mp">Max Pain</span><span class="t-metric-val" id="t-mp">—</span></div>
+        <div class="t-metric"><span class="t-metric-label">P/C</span><span class="t-metric-val" id="t-pcr">—</span></div>
+        <div class="t-metric"><span class="t-metric-label">Net DEX</span><span class="t-metric-val" id="t-ndex">—</span></div>
+      </div>
+      <div class="t-tb-right">
+        <span class="t-timestamp" id="t-timestamp">—</span>
+        <span class="t-badge live" id="t-badge">LIVE</span>
+        <button class="t-settings-btn" id="t-settings-btn">⚙</button>
+      </div>
+    </div>
+
+    <!-- ── Row 2 Left: L2 Chart Panel ── -->
+    <div class="t-chart" id="t-chart">
+      <div id="t-l2-candle-chart" style="width:100%;height:100%"></div>
+    </div>
+
+    <!-- ── Row 2 Right: Options Chain Panel ── -->
+    <div class="t-options" id="t-options">
+      <div class="oc-header">
+        <span class="oc-title">OPTIONS CHAIN</span>
+        <div class="oc-controls">
+          <select class="oc-select" id="oc-symbol">
+            <option value="QQQ" selected>QQQ</option>
+            <option value="SPY">SPY</option>
+            <option value="IWM">IWM</option>
+          </select>
+          <select class="oc-select" id="oc-expiry">
+            <option value="2026-03-21" selected>Mar 21</option>
+            <option value="2026-03-28">Mar 28</option>
+            <option value="2026-04-04">Apr 04</option>
+            <option value="2026-04-17">Apr 17</option>
+          </select>
+        </div>
+      </div>
+      <div class="oc-table-wrap">
+        <table class="oc-table" id="oc-table">
+          <thead>
+            <tr>
+              <th class="oc-call-header" colspan="4">CALLS</th>
+              <th class="oc-strike-header">STRIKE</th>
+              <th class="oc-put-header" colspan="4">PUTS</th>
+            </tr>
+            <tr class="oc-sub-header">
+              <th>Bid</th><th>Ask</th><th>Vol</th><th>IV</th>
+              <th></th>
+              <th>Bid</th><th>Ask</th><th>Vol</th><th>IV</th>
+            </tr>
+          </thead>
+          <tbody id="oc-tbody">
+            <!-- Populated by JS with mock/live data -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       OLD LAYOUT (hidden via CSS — preserved for backwards compatibility)
+       ══════════════════════════════════════════════════════════════════════ -->
+
   <!-- Vertical sidebar -->
+
   <aside class="sidebar" id="sidebar">
     <div class="sb-logo">
       <span class="sb-logo-icon">⚡</span>
@@ -862,6 +961,5 @@
 
   </div>
 </body>
-<script src="app.js"></script>
 
 </html>

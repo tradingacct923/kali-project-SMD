@@ -423,6 +423,9 @@ body {
   color: var(--text);
   font-family: 'Inter', sans-serif;
   min-height: 100vh;
+  height: 100vh;
+  margin: 0;
+  overflow: hidden;
   font-size: 13px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
@@ -4056,13 +4059,340 @@ h3 {
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════
-   Vertical Sidebar Navigation
+   TERMINAL LAYOUT — Single-screen "Super Chart" interface
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+/* Hide old sidebar + main-content */
+.sidebar { display: none !important; }
+.main-content { display: none !important; }
+
+.terminal {
+  display: grid;
+  grid-template-rows: 42px 1fr;
+  grid-template-columns: 1fr 320px;
+  grid-template-areas:
+    "toolbar toolbar"
+    "chart   options";
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+  background: var(--bg, #06080f);
+}
+
+/* ── Toolbar ── */
+.t-toolbar {
+  grid-area: toolbar;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  background: rgba(8, 10, 18, .92);
+  border-bottom: 1px solid rgba(124, 90, 247, .12);
+  backdrop-filter: blur(12px);
+  z-index: 10;
+}
+
+.t-tb-left, .t-tb-center, .t-tb-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.t-logo {
+  font-family: 'Inter', sans-serif;
+  font-size: .85rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, #e0e8f0, #7c5af7);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  white-space: nowrap;
+}
+
+.t-divider {
+  width: 1px;
+  height: 18px;
+  background: rgba(255,255,255,.08);
+  margin: 0 4px;
+}
+
+.t-btn-group {
+  display: flex;
+  gap: 2px;
+}
+
+.t-btn {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,.06);
+  color: rgba(140,160,200,.6);
+  font-family: 'JetBrains Mono', 'SF Mono', monospace;
+  font-size: .65rem;
+  font-weight: 500;
+  padding: 3px 7px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all .15s;
+}
+
+.t-btn:hover {
+  background: rgba(124, 90, 247, .1);
+  border-color: rgba(124, 90, 247, .3);
+  color: rgba(200,210,230,.9);
+}
+
+.t-btn.active {
+  background: rgba(124, 90, 247, .2);
+  border-color: rgba(124, 90, 247, .5);
+  color: #c4b5fd;
+  box-shadow: 0 0 8px rgba(124, 90, 247, .15);
+}
+
+.t-metric {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  padding: 0 8px;
+}
+
+.t-metric-label {
+  font-size: .5rem;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: rgba(140,160,200,.45);
+}
+
+.t-metric-label.cw { color: rgba(31,209,122,.6); }
+.t-metric-label.pw { color: rgba(224,48,96,.6); }
+.t-metric-label.mp { color: rgba(124,90,247,.6); }
+
+.t-metric-val {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: .7rem;
+  font-weight: 600;
+  color: rgba(200,210,230,.85);
+}
+
+.t-timestamp {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: .6rem;
+  color: rgba(140,160,200,.5);
+}
+
+.t-badge {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: .55rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+  letter-spacing: .06em;
+}
+
+.t-badge.live {
+  background: rgba(31,209,122,.15);
+  color: #1fd17a;
+  border: 1px solid rgba(31,209,122,.3);
+  animation: t-pulse 2s ease-in-out infinite;
+}
+
+@keyframes t-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .6; }
+}
+
+.t-settings-btn {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,.06);
+  color: rgba(140,160,200,.5);
+  font-size: .85rem;
+  padding: 3px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all .15s;
+}
+
+.t-settings-btn:hover {
+  background: rgba(124, 90, 247, .1);
+  color: #c4b5fd;
+}
+
+/* ── Chart Panel ── */
+.t-chart {
+  grid-area: chart;
+  overflow: hidden;
+  background: var(--bg, #06080f);
+  position: relative;
+}
+
+/* ── Options Chain Panel ── */
+.t-options {
+  grid-area: options;
+  display: flex;
+  flex-direction: column;
+  background: rgba(8, 10, 18, .95);
+  border-left: 1px solid rgba(124, 90, 247, .10);
+  overflow: hidden;
+}
+
+.oc-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(255,255,255,.05);
+  flex-shrink: 0;
+}
+
+.oc-title {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: .65rem;
+  font-weight: 700;
+  letter-spacing: .12em;
+  color: rgba(124, 90, 247, .8);
+}
+
+.oc-controls {
+  display: flex;
+  gap: 6px;
+}
+
+.oc-select {
+  background: rgba(255,255,255,.03);
+  border: 1px solid rgba(255,255,255,.08);
+  color: rgba(200,210,230,.8);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: .6rem;
+  padding: 3px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  outline: none;
+}
+
+.oc-select:focus {
+  border-color: rgba(124, 90, 247, .4);
+}
+
+.oc-select option {
+  background: #0a0c14;
+  color: #c8d2e6;
+}
+
+.oc-table-wrap {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* Scrollbar for options table */
+.oc-table-wrap::-webkit-scrollbar { width: 4px; }
+.oc-table-wrap::-webkit-scrollbar-track { background: transparent; }
+.oc-table-wrap::-webkit-scrollbar-thumb {
+  background: rgba(124, 90, 247, .2);
+  border-radius: 2px;
+}
+
+.oc-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: .58rem;
+  table-layout: fixed;
+}
+
+.oc-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: rgba(8, 10, 18, .98);
+}
+
+.oc-table th {
+  padding: 5px 4px;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-align: center;
+  border-bottom: 1px solid rgba(255,255,255,.06);
+}
+
+.oc-call-header {
+  color: rgba(31, 209, 122, .7);
+  font-size: .55rem;
+}
+
+.oc-strike-header {
+  color: rgba(200,210,230,.5);
+  font-size: .55rem;
+}
+
+.oc-put-header {
+  color: rgba(224, 48, 96, .7);
+  font-size: .55rem;
+}
+
+.oc-sub-header th {
+  color: rgba(140,160,200,.35);
+  font-size: .5rem;
+  font-weight: 500;
+  padding: 3px 4px;
+  border-bottom: 1px solid rgba(255,255,255,.04);
+}
+
+.oc-table td {
+  padding: 4px 3px;
+  text-align: center;
+  color: rgba(200,210,230,.65);
+  border-bottom: 1px solid rgba(255,255,255,.02);
+  transition: background .1s;
+}
+
+.oc-table tbody tr:hover {
+  background: rgba(124, 90, 247, .06);
+}
+
+.oc-table tbody tr.oc-atm {
+  background: rgba(124, 90, 247, .08);
+  border-top: 1px solid rgba(124, 90, 247, .2);
+  border-bottom: 1px solid rgba(124, 90, 247, .2);
+}
+
+.oc-table tbody tr.oc-atm td {
+  color: rgba(200,210,230,.9);
+  font-weight: 600;
+}
+
+.oc-table tbody tr.oc-selected {
+  background: rgba(124, 90, 247, .15);
+  box-shadow: inset 2px 0 0 #7c5af7;
+}
+
+.oc-strike-cell {
+  color: rgba(200,210,230,.85) !important;
+  font-weight: 700 !important;
+  cursor: pointer;
+  position: relative;
+}
+
+.oc-strike-cell:hover {
+  color: #c4b5fd !important;
+}
+
+.oc-call-cell { color: rgba(31, 209, 122, .7) !important; }
+.oc-put-cell { color: rgba(224, 48, 96, .7) !important; }
+
+/* ITM shading */
+.oc-itm { background: rgba(255,255,255,.015); }
+
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   OLD LAYOUT — Sidebar (hidden but preserved)
    ══════════════════════════════════════════════════════════════════════════════ */
 .app-layout {
   display: flex;
   min-height: 100vh;
   width: 100%;
 }
+
 
 .sidebar {
   width: 200px;

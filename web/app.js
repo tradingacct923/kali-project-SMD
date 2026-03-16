@@ -4259,7 +4259,9 @@ function _l2RenderSignals(signals) {
 
 function _l2InitCandleChart() {
     if (_l2ChartInitialized) return;
-    const container = document.getElementById('l2-candle-chart');
+    // Try terminal container first, then fall back to old tab container
+    const container = document.getElementById('t-l2-candle-chart')
+                   || document.getElementById('l2-candle-chart');
     if (!container || typeof LightweightCharts === 'undefined') return;
     _l2ChartInitialized = true;
 
@@ -4563,18 +4565,170 @@ function _stopL2Poll() {
     if (_l2CandlePollTimer) { clearTimeout(_l2CandlePollTimer); _l2CandlePollTimer = null; }
 }
 
-// ── Sidebar tab routing ────────────────────────────────────────────────────────
-// Patch into the existing sidebar click handler by intercepting at DOMready
+// ══════════════════════════════════════════════════════════════════════════════
+// TERMINAL MODE — Auto-start + event bus + options chain
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ── TerminalBus: lightweight pub/sub for cross-panel communication ──
+const TerminalBus = {
+    _listeners: {},
+    on(event, fn) {
+        (this._listeners[event] = this._listeners[event] || []).push(fn);
+    },
+    off(event, fn) {
+        if (!this._listeners[event]) return;
+        this._listeners[event] = this._listeners[event].filter(f => f !== fn);
+    },
+    emit(event, data) {
+        (this._listeners[event] || []).forEach(fn => fn(data));
+    },
+};
+window.TerminalBus = TerminalBus;
+
+// ── Options Chain: mock data + population ──
+let _ocSelectedStrike = null;
+
+function _ocPopulateChain() {
+    const tbody = document.getElementById('oc-tbody');
+    if (!tbody) return;
+
+    // Mock ATM based on current spot (or default to $594 for QQQ)
+    const spotEl = document.getElementById('t-spot') || document.getElementById('ds-spot');
+    const spot = parseFloat(spotEl?.textContent) || 594;
+    const atm = Math.round(spot);  // nearest integer strike
+
+    // Generate 10 strikes above and below ATM
+    const strikes = [];
+    for (let i = 10; i >= -10; i--) {
+        strikes.push(atm + i);
+    }
+
+    const rows = strikes.map(strike => {
+        const dist = Math.abs(strike - spot);
+        const isATM = strike === atm;
+        const isITMCall = strike < spot;
+        const isITMPut = strike > spot;
+
+        // Mock realistic-ish options data
+        const baseIV = 22 + Math.random() * 8;
+        const cBid = Math.max(0, (spot - strike + 2) * (1 + Math.random() * 0.3)).toFixed(2);
+        const cAsk = (parseFloat(cBid) + 0.05 + Math.random() * 0.15).toFixed(2);
+        const cVol = Math.floor(Math.random() * 5000 + (dist < 3 ? 8000 : 500));
+        const cIV = (baseIV + dist * 0.3).toFixed(1);
+        const pBid = Math.max(0, (strike - spot + 2) * (1 + Math.random() * 0.3)).toFixed(2);
+        const pAsk = (parseFloat(pBid) + 0.05 + Math.random() * 0.15).toFixed(2);
+        const pVol = Math.floor(Math.random() * 4000 + (dist < 3 ? 6000 : 400));
+        const pIV = (baseIV + dist * 0.25).toFixed(1);
+
+        const classes = [
+            isATM ? 'oc-atm' : '',
+            isITMCall ? 'oc-itm' : '',
+        ].filter(Boolean).join(' ');
+
+        return `<tr class="${classes}" data-strike="${strike}">
+            <td class="oc-call-cell">${cBid}</td>
+            <td class="oc-call-cell">${cAsk}</td>
+            <td class="oc-call-cell">${cVol.toLocaleString()}</td>
+            <td class="oc-call-cell">${cIV}%</td>
+            <td class="oc-strike-cell">${strike}</td>
+            <td class="oc-put-cell">${pBid}</td>
+            <td class="oc-put-cell">${pAsk}</td>
+            <td class="oc-put-cell">${pVol.toLocaleString()}</td>
+            <td class="oc-put-cell">${pIV}%</td>
+        </tr>`;
+    }).join('');
+
+    tbody.innerHTML = rows;
+
+    // Click-to-select wiring
+    tbody.querySelectorAll('.oc-strike-cell').forEach(cell => {
+        cell.addEventListener('click', () => {
+            const strike = parseInt(cell.textContent);
+            // Remove previous selection
+            tbody.querySelectorAll('.oc-selected').forEach(r => r.classList.remove('oc-selected'));
+            // Highlight this row
+            cell.parentElement.classList.add('oc-selected');
+            _ocSelectedStrike = strike;
+            // Emit to bus — chart can listen for this
+            TerminalBus.emit('strike-select', {
+                strike,
+                symbol: document.getElementById('oc-symbol')?.value || 'QQQ',
+            });
+            console.log(`[TerminalBus] strike-select: ${strike}`);
+        });
+    });
+
+    // Auto-scroll to ATM
+    const atmRow = tbody.querySelector('.oc-atm');
+    if (atmRow) {
+        setTimeout(() => atmRow.scrollIntoView({ block: 'center', behavior: 'smooth' }), 100);
+    }
+}
+
+// ── Bridge: push existing dashboard metrics into toolbar ──
+function _termUpdateMetrics() {
+    const copy = (srcId, dstId) => {
+        const src = document.getElementById(srcId);
+        const dst = document.getElementById(dstId);
+        if (src && dst && src.textContent !== '—') dst.textContent = src.textContent;
+    };
+    copy('ds-spot', 't-spot');
+    copy('ds-cw', 't-cw');
+    copy('ds-pw', 't-pw');
+    copy('ds-mp', 't-mp');
+    copy('ds-pcr', 't-pcr');
+    copy('ds-ndex', 't-ndex');
+    // Also update timestamp
+    const tsEl = document.getElementById('timestamp');
+    const tTsEl = document.getElementById('t-timestamp');
+    if (tsEl && tTsEl) tTsEl.textContent = tsEl.textContent;
+}
+
+// ── Terminal Init ──
 document.addEventListener('DOMContentLoaded', () => {
+    const terminal = document.getElementById('terminal');
+    if (!terminal) return;  // fallback: old layout mode
+
+    // ── Toolbar: Symbol buttons ──
+    document.querySelectorAll('#t-symbols .t-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('#t-symbols .t-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            _l2ChartSymbol = btn.dataset.sym;
+            _l2LastCandleTime = 0;
+            _l2FetchCandles(true);
+        });
+    });
+
+    // ── Toolbar: Timeframe buttons ──
+    document.querySelectorAll('#t-timeframes .t-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('#t-timeframes .t-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            _l2ChartTF = btn.dataset.tf;
+            _l2LastCandleTime = 0;
+            _l2FetchCandles(true);
+        });
+    });
+
+    // ── Auto-start L2 chart (skip tab routing) ──
+    _l2InitCandleChart();
+    _startL2Poll();
+
+    // ── Populate Options Chain with mock data ──
+    _ocPopulateChain();
+
+    // ── Metric bridge: update toolbar from old dash metrics ──
+    setInterval(_termUpdateMetrics, 2000);
+
+    // ── Old sidebar tab routing (preserved for backwards compat) ──
     document.querySelectorAll('.sb-item[data-tab]').forEach(btn => {
         btn.addEventListener('click', () => {
             const tab = btn.getAttribute('data-tab');
-            if (tab === 'l2') {
-                _startL2Poll();
-            } else {
-                _stopL2Poll();
-            }
+            if (tab === 'l2') _startL2Poll();
+            else _stopL2Poll();
         });
     });
-});
 
+    console.log('[Terminal] Super Chart mode initialized');
+});
