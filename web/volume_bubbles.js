@@ -20,7 +20,7 @@
 // CONFIG
 // ═══════════════════════════════════════════════════════════════════════════
 const BUBBLE_CONFIG = {
-    MIN_BUBBLE_VOL: 10,       // minimum total vol to draw a bubble
+    MIN_BUBBLE_VOL: 1,        // minimum total vol to draw a bubble (set to 10+ for production)
     MAX_RADIUS: 22,           // max bubble radius in px (prevents swallowing the chart)
     MIN_RADIUS: 3,            // min bubble radius
     DOT_RADIUS: 2.5,          // radius for macro-zoom dots
