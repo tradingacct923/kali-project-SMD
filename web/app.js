@@ -4261,34 +4261,55 @@ function _l2InitCandleChart() {
     if (!container || typeof LightweightCharts === 'undefined') return;
     _l2ChartInitialized = true;
 
+    // Full container height (the CSS sets calc(100vh - 120px))
+    const chartH = container.clientHeight || 700;
+
     _l2CandleChart = LightweightCharts.createChart(container, {
         width: container.clientWidth,
-        height: 420,
+        height: chartH,
         layout: {
-            background: { type: 'solid', color: '#0a0c14' },
-            textColor: '#6b7896',
-            fontFamily: "'JetBrains Mono', monospace",
+            background: { type: 'solid', color: 'transparent' },
+            textColor: 'rgba(140,160,200,.65)',
+            fontFamily: "'JetBrains Mono', 'SF Mono', monospace",
             fontSize: 11,
         },
         grid: {
-            vertLines: { color: 'rgba(255,255,255,.03)' },
-            horzLines: { color: 'rgba(255,255,255,.03)' },
+            vertLines: { color: 'rgba(255,255,255,.025)', style: 1 },
+            horzLines: { color: 'rgba(255,255,255,.025)', style: 1 },
         },
         crosshair: {
             mode: LightweightCharts.CrosshairMode.Normal,
-            vertLine: { color: 'rgba(124,90,247,.4)', width: 1, style: 2 },
-            horzLine: { color: 'rgba(124,90,247,.4)', width: 1, style: 2 },
+            vertLine: {
+                color: 'rgba(124,90,247,.5)',
+                width: 1,
+                style: 2,
+                labelBackgroundColor: 'rgba(124,90,247,.85)',
+            },
+            horzLine: {
+                color: 'rgba(124,90,247,.5)',
+                width: 1,
+                style: 2,
+                labelBackgroundColor: 'rgba(124,90,247,.85)',
+            },
         },
         rightPriceScale: {
             borderColor: 'rgba(255,255,255,.06)',
-            scaleMargins: { top: 0.05, bottom: 0.2 },
+            scaleMargins: { top: 0.02, bottom: 0.18 },
+            textColor: 'rgba(140,160,200,.55)',
+            entireTextOnly: true,
         },
         timeScale: {
             borderColor: 'rgba(255,255,255,.06)',
             timeVisible: true,
             secondsVisible: true,
-            rightOffset: 5,
+            rightOffset: 8,
+            barSpacing: 7,
+            minBarSpacing: 2,
+            fixLeftEdge: false,
+            fixRightEdge: false,
         },
+        handleScroll: { mouseWheel: true, pressedMouseMove: true },
+        handleScale: { axisPressedMouseMove: true, mouseWheel: true, pinch: true },
     });
 
     _l2CandleSeries = _l2CandleChart.addCandlestickSeries({
@@ -4296,69 +4317,97 @@ function _l2InitCandleChart() {
         downColor: '#e03060',
         borderUpColor: '#1fd17a',
         borderDownColor: '#e03060',
-        wickUpColor: '#1fd17a',
-        wickDownColor: '#e03060',
+        wickUpColor: 'rgba(31,209,122,.7)',
+        wickDownColor: 'rgba(224,48,96,.7)',
+        priceFormat: { type: 'price', precision: 2, minMove: 0.25 },
     });
 
     _l2VolumeSeries = _l2CandleChart.addHistogramSeries({
-        color: '#7c5af74d',
         priceFormat: { type: 'volume' },
-        priceScaleId: '',
+        priceScaleId: 'vol',
+    });
+    _l2CandleChart.priceScale('vol').applyOptions({
         scaleMargins: { top: 0.85, bottom: 0 },
+        drawTicks: false,
     });
 
-    // Resize observer
-    const ro = new ResizeObserver(() => {
-        if (_l2CandleChart) _l2CandleChart.applyOptions({ width: container.clientWidth });
+    // ResizeObserver for responsive chart
+    const ro = new ResizeObserver(entries => {
+        for (const entry of entries) {
+            const { width, height } = entry.contentRect;
+            if (_l2CandleChart && width > 0) {
+                _l2CandleChart.applyOptions({ width, height: height || chartH });
+            }
+        }
     });
     ro.observe(container);
 
-    // Button handlers — symbol
+    // ── Symbol buttons ──
     document.querySelectorAll('#l2-chart-symbols .l2-tf-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             document.querySelectorAll('#l2-chart-symbols .l2-tf-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             _l2ChartSymbol = btn.dataset.sym;
-            _l2FetchCandles();
+            _l2PrevCandleCount = 0;
+            _l2FetchCandles(true);
         });
     });
 
-    // Button handlers — timeframe
+    // ── Timeframe buttons ──
     document.querySelectorAll('#l2-chart-tfs .l2-tf-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             document.querySelectorAll('#l2-chart-tfs .l2-tf-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             _l2ChartTF = btn.dataset.tf;
-            _l2FetchCandles();
+            _l2PrevCandleCount = 0;
+            _l2FetchCandles(true);
         });
     });
 
     // Initial fetch
-    _l2FetchCandles();
-    // Poll candles every 1s for live updates
-    _l2CandlePollTimer = setInterval(_l2FetchCandles, 250);
+    _l2FetchCandles(true);
+    // Live poll every 2s (balance between freshness and performance)
+    _l2CandlePollTimer = setInterval(() => _l2FetchCandles(false), 2000);
 }
 
-function _l2FetchCandles() {
+let _l2PrevCandleCount = 0;
+
+function _l2FetchCandles(fullRedraw) {
     if (!_l2CandleSeries) return;
     authFetch(`/api/l2/candles?symbol=${_l2ChartSymbol}&tf=${_l2ChartTF}`)
         .then(r => r.json())
-        .then(candles => {
+        .then(resp => {
+            const candles = resp.candles;
             if (!Array.isArray(candles) || candles.length === 0) return;
+
             const ohlc = candles.map(c => ({
-                time: Math.floor(c.t),
-                open: c.o,
-                high: c.h,
-                low: c.l,
-                close: c.c,
+                time: c.time,
+                open: c.open,
+                high: c.high,
+                low: c.low,
+                close: c.close,
             }));
             const vol = candles.map(c => ({
-                time: Math.floor(c.t),
-                value: c.v || 0,
-                color: c.c >= c.o ? 'rgba(31,209,122,.3)' : 'rgba(224,48,96,.3)',
+                time: c.time,
+                value: c.volume || 0,
+                color: c.close >= c.open ? 'rgba(31,209,122,.25)' : 'rgba(224,48,96,.25)',
             }));
-            _l2CandleSeries.setData(ohlc);
-            _l2VolumeSeries.setData(vol);
+
+            if (fullRedraw || candles.length !== _l2PrevCandleCount) {
+                // Full setData for initial load or when bar count changes (new bar formed)
+                _l2CandleSeries.setData(ohlc);
+                _l2VolumeSeries.setData(vol);
+                _l2PrevCandleCount = candles.length;
+                if (fullRedraw) {
+                    _l2CandleChart.timeScale().fitContent();
+                }
+            } else {
+                // Just update the last candle (live tick — no redraw flicker)
+                const lastOhlc = ohlc[ohlc.length - 1];
+                const lastVol = vol[vol.length - 1];
+                _l2CandleSeries.update(lastOhlc);
+                _l2VolumeSeries.update(lastVol);
+            }
         })
         .catch(() => {});
 }
@@ -4398,6 +4447,8 @@ function _startL2Poll() {
     loadL2();
     if (_l2PollTimer) clearInterval(_l2PollTimer);
     _l2PollTimer = setInterval(loadL2, 500);
+    // Also kickstart candle chart if not yet initialized
+    _l2InitCandleChart();
 }
 
 function _stopL2Poll() {

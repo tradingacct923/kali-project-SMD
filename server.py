@@ -1389,6 +1389,70 @@ def api_inference():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+# ── Level 2 Candle Chart API ─────────────────────────────────────────────────
+
+@app.route("/api/l2/candles")
+def api_l2_candles():
+    """OHLCV candles from L2 tick data.
+    Query params:
+      ?symbol=NQ  (default NQ)
+      ?tf=1m      (default 1m — one of: 5s,15s,30s,1m,5m,15m,30m,1h,4h)
+    Returns JSON array of {time, open, high, low, close, volume} for LWC.
+    """
+    try:
+        from background_engine.l2_worker import get_candles, CANDLE_TIMEFRAMES
+        symbol = request.args.get("symbol", "NQ").upper()
+        tf     = request.args.get("tf", "1m")
+        if tf not in CANDLE_TIMEFRAMES:
+            return jsonify({"error": f"Invalid tf '{tf}'. Use: {list(CANDLE_TIMEFRAMES.keys())}"}), 400
+
+        raw = get_candles(symbol, tf)
+        # Convert to TradingView Lightweight Charts format (time as Unix seconds)
+        candles = []
+        for c in raw:
+            t = c.get("t", 0)
+            candles.append({
+                "time":   int(t),
+                "open":   c["o"],
+                "high":   c["h"],
+                "low":    c["l"],
+                "close":  c["c"],
+                "volume": c.get("v", 0),
+            })
+        # Deduplicate by time (keep last occurrence)
+        seen = {}
+        for c in candles:
+            seen[c["time"]] = c
+        candles = sorted(seen.values(), key=lambda x: x["time"])
+
+        return jsonify({"symbol": symbol, "tf": tf, "candles": candles})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/l2/status")
+def api_l2_status():
+    """L2 connection health and candle availability."""
+    try:
+        from background_engine.l2_worker import get_l2_state, _CANDLES, CANDLE_TIMEFRAMES
+        state = get_l2_state()
+        # Candle counts per symbol/tf
+        counts = {}
+        for sym in ["NQ", "ES", "YM", "RTY"]:
+            counts[sym] = {}
+            for tf in CANDLE_TIMEFRAMES:
+                q = _CANDLES.get(sym, {}).get(tf)
+                counts[sym][tf] = len(q) if q else 0
+        return jsonify({
+            "connected":   state.get("connected", False),
+            "mid_prices":  state.get("mid_prices", {}),
+            "last_update": state.get("last_update", 0),
+            "candle_counts": counts,
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 # ── Background workers (run under BOTH gunicorn and direct execution) ─────────
 import threading as _startup_threading
 

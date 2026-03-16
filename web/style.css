@@ -4504,15 +4504,59 @@ button:active,
 .l2-signal-bar { height: 4px; border-radius: 2px; margin-top: 8px; background: rgba(255,255,255,.06); overflow: hidden; }
 .l2-signal-fill { height: 100%; border-radius: 2px; transition: width .5s ease, background .5s ease; }
 
-/* Candlestick chart timeframe/symbol buttons */
+/* ── Candlestick chart timeframe/symbol buttons ─────────────────────────────── */
 .l2-tf-btn {
-  background: var(--bg3); border: 1px solid var(--border); border-radius: 5px;
-  color: var(--dim); font: 600 .62rem 'JetBrains Mono', monospace;
-  padding: 4px 8px; cursor: pointer; transition: all .15s;
-  letter-spacing: .5px; text-transform: uppercase;
+  background: rgba(8,10,20,.85);
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 6px;
+  color: rgba(140,160,200,.55);
+  font: 600 .62rem 'JetBrains Mono', monospace;
+  padding: 5px 10px;
+  cursor: pointer;
+  transition: all .18s ease;
+  letter-spacing: .5px;
+  text-transform: uppercase;
 }
-.l2-tf-btn:hover { border-color: var(--border2); color: var(--text); background: var(--bg4); }
-.l2-tf-btn.active { background: color-mix(in srgb, var(--accent) 15%, transparent);
-  border-color: var(--accent); color: var(--accent); }
-.l2-chart-symbols, .l2-chart-tfs { display: flex; gap: 3px; }
-#l2-candle-chart { border-radius: 0 0 10px 10px; overflow: hidden; }
+.l2-tf-btn:hover {
+  border-color: rgba(255,255,255,.15);
+  color: var(--text);
+  background: rgba(20,24,40,.9);
+}
+.l2-tf-btn.active {
+  background: rgba(124,90,247,.15);
+  border-color: rgba(124,90,247,.5);
+  color: var(--accent);
+  box-shadow: 0 0 10px rgba(124,90,247,.15), inset 0 0 8px rgba(124,90,247,.08);
+}
+.l2-chart-symbols, .l2-chart-tfs { display: flex; gap: 4px; }
+
+/* ── Candlestick chart container ────────────────────────────────────────────── */
+#l2-candle-chart {
+  border-radius: 0 0 12px 12px;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 0%, rgba(124,90,247,.03), transparent 70%),
+    linear-gradient(180deg, rgba(6,8,16,1) 0%, rgba(4,5,12,1) 100%);
+}
+
+/* L2 tab — no padding on chart card for full-bleed */
+#tab-l2 {
+  padding: 0 !important;
+}
+#tab-l2 > .chart-card.full {
+  margin: 0;
+  border-radius: 0;
+  border: none;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+#tab-l2 .card-header {
+  padding: 10px 16px;
+  background: rgba(6,8,16,.95) !important;
+  border-bottom: 1px solid rgba(255,255,255,.06);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
