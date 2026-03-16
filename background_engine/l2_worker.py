@@ -43,6 +43,7 @@ CANDLE_TIMEFRAMES = {
     "1h": 3600, "4h": 14400,
 }
 CANDLE_MAX = 2000  # max candles stored per timeframe per symbol (holds full 24h session)
+BUBBLE_TICK_SIZE = 0.25  # price quantization for bubble profile (NQ/ES tick size)
 
 # {symbol: {tf: deque([{t,o,h,l,c,v}, ...])}}
 _CANDLES: dict[str, dict[str, deque]] = defaultdict(
@@ -61,9 +62,28 @@ def _candle_boundary(timestamp: float, seconds: int) -> float:
     return (int(timestamp) // seconds) * seconds
 
 
-def _feed_candle(symbol: str, price: float, volume: int, timestamp: float):
+def _feed_candle(symbol: str, price: float, volume: int, timestamp: float,
+                 side: str = "n"):
     """Feed a trade tick into the candle engine for all timeframes.
-    Thread-safe: acquires _CANDLE_LOCK to prevent data races with get_candles()."""
+
+    Args:
+        side: Trade aggression classification.
+              'b' = aggressive buy (hit the ask)
+              's' = aggressive sell (hit the bid)
+              'n' = neutral / passive
+
+    Each candle accumulates a 'bp' (bubble profile) dict:
+        {quantized_price_str: [buy_vol, sell_vol]}
+    This structure is compact for JSON and lets the frontend render
+    volume bubbles at each price level with buy/sell coloring.
+    Historical/backfill candles have no 'bp' key — the frontend uses
+    this absence to render the 'Live data starts here' seam.
+
+    Thread-safe: acquires _CANDLE_LOCK.
+    """
+    # Quantize price to tick size for bubble aggregation
+    qp = str(round(round(price / BUBBLE_TICK_SIZE) * BUBBLE_TICK_SIZE, 2))
+
     with _CANDLE_LOCK:
         for tf, seconds in CANDLE_TIMEFRAMES.items():
             boundary = _candle_boundary(timestamp, seconds)
@@ -72,8 +92,11 @@ def _feed_candle(symbol: str, price: float, volume: int, timestamp: float):
             if cur is None or cur["t"] != boundary:
                 # Close previous candle if it exists
                 if cur is not None:
-                    _CANDLES[symbol][tf].append(dict(cur))
-                # Start new candle
+                    _CANDLES[symbol][tf].append(_freeze_candle(cur))
+                # Start new candle with bubble profile
+                bp = {}
+                bp[qp] = [volume if side == "b" else 0,
+                          volume if side == "s" else 0]
                 _CURRENT_CANDLE[symbol][tf] = {
                     "t": boundary,
                     "o": price,
@@ -81,6 +104,7 @@ def _feed_candle(symbol: str, price: float, volume: int, timestamp: float):
                     "l": price,
                     "c": price,
                     "v": volume,
+                    "bp": bp,
                 }
             else:
                 # Update existing candle
@@ -88,16 +112,53 @@ def _feed_candle(symbol: str, price: float, volume: int, timestamp: float):
                 cur["l"] = min(cur["l"], price)
                 cur["c"] = price
                 cur["v"] += volume
+                # Accumulate bubble profile
+                bp = cur.get("bp")
+                if bp is not None:
+                    entry = bp.get(qp)
+                    if entry:
+                        if side == "b":
+                            entry[0] += volume
+                        elif side == "s":
+                            entry[1] += volume
+                    else:
+                        bp[qp] = [volume if side == "b" else 0,
+                                  volume if side == "s" else 0]
+
+
+def _freeze_candle(candle: dict) -> dict:
+    """Create a snapshot of a candle for storage. Strips bubble profile
+    entries with zero volume to keep memory tight."""
+    snap = {
+        "t": candle["t"],
+        "o": candle["o"],
+        "h": candle["h"],
+        "l": candle["l"],
+        "c": candle["c"],
+        "v": candle["v"],
+    }
+    bp = candle.get("bp")
+    if bp:
+        # Only keep levels with actual volume (buy or sell > 0)
+        clean = {k: v for k, v in bp.items() if v[0] > 0 or v[1] > 0}
+        if clean:
+            snap["bp"] = clean
+    return snap
 
 
 def get_candles(symbol: str, tf: str) -> list:
     """Return closed candles + current candle for a symbol/timeframe.
-    Thread-safe: uses _CANDLE_LOCK (same lock as _feed_candle)."""
+    Thread-safe: uses _CANDLE_LOCK (same lock as _feed_candle).
+
+    Each candle dict has keys: t, o, h, l, c, v, and optionally 'bp'.
+    Historical (backfill) candles will NOT have a 'bp' key.
+    Live candles will have bp = {price_str: [buy_vol, sell_vol], ...}.
+    """
     with _CANDLE_LOCK:
         closed = list(_CANDLES.get(symbol, {}).get(tf, []))
         cur = _CURRENT_CANDLE.get(symbol, {}).get(tf)
         if cur:
-            closed.append(dict(cur))
+            closed.append(_freeze_candle(cur))
     return closed
 
 # ── Shared signal store (read by server.py /api/l2 endpoint) ─────────────────
@@ -230,7 +291,7 @@ def on_trade(symbol: str, trade: dict):
         with _L2_LOCK:
             L2_STATE["signals"]["ising_magnetization"] = _ising.get_signal()
 
-    # Feed OHLC candle engine
+    # Feed OHLC candle engine with aggression classification
     price = trade.get("price", 0)
     vol = trade.get("volume", 1)
     ts = trade.get("timestamp", time.time())
@@ -241,7 +302,21 @@ def on_trade(symbol: str, trade: dict):
         except Exception:
             ts = time.time()
     if price > 0:
-        _feed_candle(symbol, price, vol, ts)
+        # ── Tick classification ──
+        # Classify trade aggression by comparing price to current BBO.
+        # Reading best_bid/best_ask from L2_STATE["dom"] without _L2_LOCK
+        # is safe here: float reads are atomic in CPython, and we only need
+        # an approximate snapshot (off-by-one-tick is acceptable for bubbles).
+        side = "n"  # default: neutral/passive
+        dom = L2_STATE["dom"].get(symbol)
+        if dom:
+            best_ask = dom.get("best_ask", 0)
+            best_bid = dom.get("best_bid", 0)
+            if best_ask > 0 and price >= best_ask:
+                side = "b"  # aggressive buy (lifted the ask)
+            elif best_bid > 0 and price <= best_bid:
+                side = "s"  # aggressive sell (hit the bid)
+        _feed_candle(symbol, price, vol, ts, side=side)
 
     # Store trade in L2_STATE
     with _L2_LOCK:

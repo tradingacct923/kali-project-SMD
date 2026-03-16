@@ -4083,10 +4083,12 @@ let _l2PollTimer = null;
 let _l2CandleChart = null;
 let _l2CandleSeries = null;
 let _l2VolumeSeries = null;
+let _l2BubbleSeries = null;  // Custom series for volume bubbles
 let _l2ChartSymbol = 'NQ';
 let _l2ChartTF = '1m';
 let _l2ChartInitialized = false;
 let _l2CandlePollTimer = null;
+let _l2SeamTime = 0;  // timestamp of the first candle with live bubble data
 let _l2TapeAll = [];   // accumulated trades, newest first
 
 const L2_SYMBOLS = ['NQ', 'ES', 'YM', 'RTY'];
@@ -4331,6 +4333,15 @@ function _l2InitCandleChart() {
         drawTicks: false,
     });
 
+    // Volume Bubble custom series (renders bp data as circles on the chart)
+    if (typeof VolumeBubbleSeries !== 'undefined') {
+        _l2BubbleSeries = _l2CandleChart.addCustomSeries(new VolumeBubbleSeries(), {
+            priceScaleId: '',    // overlay on main price scale
+            lastValueVisible: false,
+            priceLineVisible: false,
+        });
+    }
+
     // ResizeObserver for responsive chart
     const ro = new ResizeObserver(entries => {
         for (const entry of entries) {
@@ -4426,6 +4437,41 @@ function _l2FetchCandles(fullRedraw) {
                 _l2CandleSeries.setData(ohlc);
                 _l2VolumeSeries.setData(vol);
                 _l2CandleChart.timeScale().fitContent();
+
+                // ── VOLUME BUBBLE DATA ──
+                // Feed the custom bubble series with candle data + bp profiles.
+                // Only candles with bp will render bubbles; historical candles
+                // produce empty renders (no bp key).
+                if (_l2BubbleSeries) {
+                    const bubbleData = candles.map(c => ({
+                        time: c.time,
+                        close: c.close,  // needed for priceValueBuilder
+                        bp: c.bp || null,
+                    }));
+                    _l2BubbleSeries.setData(bubbleData);
+                }
+
+                // ── LIVE DATA SEAM MARKER ──
+                // Find the first candle with bubble profile data (bp).
+                // This marks where live WebSocket data starts.
+                _l2SeamTime = 0;
+                for (const c of candles) {
+                    if (c.bp && Object.keys(c.bp).length > 0) {
+                        _l2SeamTime = c.time;
+                        break;
+                    }
+                }
+                if (_l2SeamTime > 0) {
+                    _l2CandleSeries.setMarkers([{
+                        time: _l2SeamTime,
+                        position: 'belowBar',
+                        color: 'rgba(124,90,247,.8)',
+                        shape: 'arrowUp',
+                        text: 'LIVE ▸',
+                    }]);
+                } else {
+                    _l2CandleSeries.setMarkers([]);
+                }
             } else {
                 // ── DELTA UPDATE: update() only ──
                 // Server returns only candles with time >= _l2LastCandleTime
@@ -4445,6 +4491,14 @@ function _l2FetchCandles(fullRedraw) {
                         value: c.volume || 0,
                         color: c.close >= c.open ? 'rgba(31,209,122,.25)' : 'rgba(224,48,96,.25)',
                     });
+                    // Update bubble series with latest bp data
+                    if (_l2BubbleSeries) {
+                        _l2BubbleSeries.update({
+                            time: c.time,
+                            close: c.close,
+                            bp: c.bp || null,
+                        });
+                    }
                 }
             }
 

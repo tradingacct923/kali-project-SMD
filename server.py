@@ -1430,14 +1430,19 @@ def api_l2_candles():
             # Delta filter: skip candles before 'since' timestamp
             if since and t < since:
                 continue
-            candles.append({
+            candle_out = {
                 "time":   t,
                 "open":   c["o"],
                 "high":   c["h"],
                 "low":    c["l"],
                 "close":  c["c"],
                 "volume": c.get("v", 0),
-            })
+            }
+            # Include bubble profile only for live candles (backfill candles have no 'bp')
+            bp = c.get("bp")
+            if bp:
+                candle_out["bp"] = bp
+            candles.append(candle_out)
 
         # Deduplicate by time (keep last occurrence)
         seen = {}
