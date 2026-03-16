@@ -246,7 +246,30 @@ def index():
     with open(html_path, "r", encoding="utf-8") as f:
         content = f.read()
     content = content.replace("BUILD_VERSION", _BUILD_VER)
-    return Response(content, mimetype="text/html")
+    resp = Response(content, mimetype="text/html")
+    # Force no caching — ensures Render/CDN always serves fresh HTML
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    resp.headers["Pragma"] = "no-cache"
+    resp.headers["Expires"] = "0"
+    return resp
+
+# ── Debug: prove what HTML is being served ────────────────────────────────────
+@app.route("/api/debug/html")
+def debug_html():
+    html_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web", "index.html")
+    with open(html_path, "r", encoding="utf-8") as f:
+        content = f.read()
+    has_sidebar = "sidebar" in content
+    has_terminal = "terminal" in content
+    line_count = content.count("\n") + 1
+    return jsonify({
+        "file": html_path,
+        "line_count": line_count,
+        "has_sidebar": has_sidebar,
+        "has_terminal": has_terminal,
+        "first_500_chars": content[:500],
+        "build_ver": _BUILD_VER,
+    })
 
 # â”€â”€ Settings API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @app.route("/api/settings", methods=["GET"])
